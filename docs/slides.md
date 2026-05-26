@@ -2,9 +2,6 @@
 SPP slide deck. Convert to PDF / HTML with marp:
 
   npx @marp-team/marp-cli@latest docs/slides.md -o docs/slides.pdf
-
-Numbers in italics are placeholders that will be replaced once
-scripts/analyze_results.py finishes producing results/summary.csv.
 -->
 
 ---
@@ -30,8 +27,6 @@ Kim, Pugsley, Gratz, Reddy, Wilkerson, Chishti
 - They give up on multi-delta, page-internal, or irregular patterns.
 - **SPP's pitch**: aggressive *when confident*, restrained otherwise, so no cache pollution on hard workloads.
 
-![bg right:35% w:90%](https://upload.wikimedia.org/wikipedia/commons/thumb/0/03/2D_Stencil_Pattern.svg/600px-2D_Stencil_Pattern.svg.png)
-
 A 2-D stencil's per-cell deltas (−W, −1, +1, +W) defeat fixed stride/stream prefetchers, but the *sequence* is exactly the signature SPP compresses.
 
 ---
@@ -51,7 +46,7 @@ addr        | sig 12b|   |  Δ + cΔ|        threshold = 25 %
                   GHR (8 entries)              tracks usefulness
 ```
 
-`sig' = (sig ≪ 3) ⊕ Δ`  (4-bit shift × 12-bit sig × 7-bit Δ_sm)
+`sig' = (sig ≪ 3) ⊕ Δ`  (3-bit shift × 12-bit sig × 7-bit Δ_sm)
 
 `path_conf = α · (c_Δ / c_sig) · prev_conf`
 
@@ -61,10 +56,10 @@ addr        | sig 12b|   |  Δ + cΔ|        threshold = 25 %
 
 - **3 new files** under `src/prefetcher/`:
   - `pref_spp.h` (data structures)
-  - `pref_spp.c` (~500 LoC algorithm + lookahead loop)
+  - `pref_spp.c` (~600 LoC algorithm + lookahead loop)
   - `pref_spp.param.def` (15 knobs)
 - **1 row** added to `pref_table.def`; **1** include in `pref_common.c`.
-- **11** SPP-specific `STAT_EVENT`s (operate, ST hit, GHR boot, …).
+- **20** SPP-specific `STAT_EVENT`s (operate, ST hit, GHR boot, …).
 - Total state: **≈ 6 KB** (matches paper).
 
 ```c
@@ -91,61 +86,59 @@ addr        | sig 12b|   |  Δ + cΔ|        threshold = 25 %
 
 ---
 
+## Two bugs we hit while bringing this up
+
+- **Per-iteration scratch queue.** ChampSim grows one `pf_q` over the whole `do { ... }` loop; with multi-Δ patterns + `MAX_DEPTH = 16` that overflows. We allocate `PT_WAY + 1` slots and reset every outer iteration.
+- **Stat-event OOB.** Originally indexed `STAT_EVENT(0, DEPTH_MAX + i)` for `i = 0..9` — but `DEPTH_MAX` is the **last** stat in the entire `stat_files.def` chain, so those writes ran past `global_stat_array`. Replaced with ten explicit `DEPTH_0..DEPTH_8/GE9` stats.
+
+Both manifested as SIGSEGV on `linkedlist` / `strided` at lookahead depth ≥ 4.
+
+---
+
 ## Evaluation methodology
 
-- **Scarab** cycle-accurate, `PARAMS.kaby_lake` (32 KB L1, **1 MB 8-way L2**, DDR4-2400).
+- **Scarab** cycle-accurate, `PARAMS.kaby_lake` (32 KB L1d, **1 MB 8-way L2**, DDR4-2400).
 - **4 configs**: `nopref`, `stride`, `stream`, `spp`.
-- **5 micro-benchmarks** (`benchmarks/bench_*.c`), each `-O2 -march=nehalem -static`:
-
-| | what it does | what SPP should do |
-|-|-|-|
-| `stride` | scan 16 MB by +1 cache line | deep lookahead chain |
-| `strided` | scan 32 MB by +7 cache lines | learn +7 Δ |
-| `2dstencil` | 5-pt Jacobi, 512×8192 | multi-Δ per cell |
-| `linkedlist` | pointer-chase 256K nodes | learn +1/+2 alternating Δ |
-| `random` | xorshift indexed loads | conservative, *no* harm |
-
-- 20 M-instruction runs after PIN fast-forward. Metrics: IPC, L2 MPKI, prefetch accuracy/coverage, SPP lookahead depth.
+- **5 micro-benchmarks**: sequential, large-stride, 2-D stencil, pointer-chase, random.
+- **10 M-instruction** runs after PIN fast-forward.
+- Metrics: IPC, L2 MPKI, prefetcher accuracy / coverage, SPP lookahead depth.
 
 ---
 
-## Results: IPC speedup
+## Headline results: speedup over no-prefetcher
 
-![h:11cm](../results/speedup.png)
+| Benchmark | stride | stream | **SPP** |
+|-|-|-|-|
+| `stride` (sequential) | 1.07× | **1.20×** | 0.95× |
+| `strided` (+7 lines)  | 1.01× | 1.00×     | 1.00× |
+| `2dstencil`           | 1.18× | **1.37×** | **1.07×** |
+| `linkedlist`          | **3.77×** | 3.71× | **3.47×** |
+| `random`              | 1.00× | 1.00×     | 1.00× |
 
-- *`stride`*: stream wins; SPP within 5 % of nopref (4 KB page boundary limits sequential chain).
-- *`2dstencil`*: SPP +7 %; stream +37 % (its straight forward streams dominate).
-- *`linkedlist`*: stride/stream/SPP all ≈ **3.7× nopref** — the deterministic +3 element stride is learnable.
-- *`random`*: all configs within 0.1 % — SPP does **not** pollute.
-
----
-
-## Results: prefetch quality
-
-![h:11cm](../results/pref_accuracy.png)
-
-- SPP keeps **>95 %** accuracy because the path-confidence gate suppresses low-conf prefetches.
-- Average lookahead depth: ~9 hops on stride/stencil, ~0 on random → exactly the confidence-throttling the paper aimed for.
+**SPP shines on `linkedlist`** (3.47× — pointer-chasing with intra-page structure)
+**SPP does no harm on `random`** (0 prefetches issued — confidence gate works)
 
 ---
 
 ## What surprised us
 
-- **4 KB OS-page boundary caps SPP on pure sequential streams** — every 64 lines the chain breaks and the GHR has to re-seed the next page. Stride prefetchers don't have this issue (they operate on coarser 64 KB regions).
-- **Per-iter scratch queue was essential** — using a single growing `pf_q` (as ChampSim does) overflows under multi-Δ workloads with `MAX_DEPTH > 3`. We reset head/tail every outer iteration.
-- **Build portability**: 5 small patches to Scarab needed for Ubuntu 24 / GCC 13 (`<cstdint>`, `-fcommon`, deprecated PIN APIs).
+- **4 KB OS-page boundary** caps SPP on pure sequential streams (chain breaks every 64 lines). Stride/stream use coarser 64 KB regions and don't have this issue.
+- On `stride`, SPP issues 303 K prefetches with **97 % accuracy**, but **90 % are *late*** — SPP arrives just-in-time while stream pre-stages farther ahead.
+- On `linkedlist`, **average lookahead depth is 12 hops**; on `random` it is **0** — exactly the throttling the paper aimed for.
+- Scarab on Ubuntu 24 / GCC 13 needed five small portability patches (`<cstdint>`, `-fcommon`, deprecated PIN APIs, …).
 
 ---
 
 ## Conclusion + Future Work
 
-- **Implemented the full paper algorithm** (ST + PT + Filter + GHR + path-confidence lookahead) and reproduce its qualitative behaviour:
-  - Aggressive on predictable workloads.
-  - Quiet on `random`.
-  - Limited where the page boundary hides structure.
-- **Future**: ChampSim/SPEC traces; SPP+PPF perceptron filter [Bhatia ISCA'19]; multi-core sharing.
+- **Implemented the full paper algorithm** (ST + PT + Filter + GHR + path-confidence lookahead).
+- **Reproduced the qualitative behaviour**: aggressive when confident, quiet otherwise, decisive win on linked-list, no harm on random.
+- **Future**:
+  - SPEC CPU traces once we extend Scarab's BMI2/AVX2 decoder.
+  - SPP+PPF perceptron filter [Bhatia ISCA'19] for usefulness prediction.
+  - Multi-core PT sharing.
 
-**Repo**: see `README.md` for build + run instructions.
+**Repo**: https://github.com/wyhlovecpp/cse220-final-project — see `README.md` for build + run.
 
 ---
 

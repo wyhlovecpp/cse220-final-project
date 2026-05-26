@@ -1,0 +1,36 @@
+# Headline numbers
+
+## stride
+config         IPC  speedup    MPKI    acc    cov  depth
+nopref       1.814    1.00x   31.25  0.00%  0.00%   0.00
+stride       1.948    1.07x   31.25 94.62% 41.49%   0.00
+stream       2.174    1.20x   31.26 99.96% 49.99%   0.00
+spp          1.730    0.95x   31.25 96.68% 48.38%   9.86
+
+## strided
+config         IPC  speedup    MPKI    acc    cov  depth
+nopref       0.331    1.00x  250.00  0.00%  0.00%   0.00
+stride       0.334    1.01x  250.02 16.60% 13.06%   0.00
+stream       0.330    1.00x  250.69  0.00%  0.00%   0.00
+spp          0.331    1.00x  250.01  7.78%  6.34%  10.50
+
+## 2dstencil
+config         IPC  speedup    MPKI    acc    cov  depth
+nopref       2.536    1.00x   19.23  0.00%  0.00%   0.00
+stride       3.001    1.18x   19.24 99.26% 48.81%   0.00
+stream       3.470    1.37x   19.24 99.95% 49.99%   0.00
+spp          2.720    1.07x   19.23 97.12% 48.49%   9.01
+
+## linkedlist
+config         IPC  speedup    MPKI    acc    cov  depth
+nopref       0.049    1.00x  250.00  0.00%  0.00%   0.00
+stride       0.183    3.77x  250.05 99.98% 49.96%   0.00
+stream       0.180    3.71x  375.15 66.64% 39.99%   0.00
+spp          0.169    3.47x  250.05 99.98% 49.02%  12.28
+
+## random
+config         IPC  speedup    MPKI    acc    cov  depth
+nopref       0.625    1.00x   62.61  0.00%  0.00%   0.00
+stride       0.625    1.00x   62.61  0.00%  0.00%   0.00
+stream       0.625    1.00x   62.61  0.00%  0.00%   0.00
+spp          0.625    1.00x   62.62 11.58%  0.00%   0.00

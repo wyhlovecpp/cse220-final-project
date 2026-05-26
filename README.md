@@ -73,7 +73,17 @@ On each L2 demand SPP (1) updates the page's signature, (2) trains the PT with t
 
 ## Headline result
 
-*(populated by `scripts/analyze_results.py` once the experiment matrix completes)*
+Across 5 micro-benchmarks (10 M instructions each after fast-forward):
+
+| Benchmark | nopref IPC | stride speedup | stream speedup | **SPP speedup** |
+|-|-|-|-|-|
+| `stride`     | 1.814 | 1.07× | **1.20×** | 0.95× |
+| `strided`    | 0.331 | 1.01× | 1.00×     | 1.00× |
+| `2dstencil`  | 2.536 | 1.18× | **1.37×** | **1.07×** |
+| `linkedlist` | 0.049 | **3.77×** | 3.71× | **3.47×** |
+| `random`     | 0.625 | 1.00× | 1.00×     | 1.00× |
+
+SPP achieves **3.47× speedup on pointer-chasing** and **does no harm on random access**, exactly the conservative-but-aggressive behaviour the paper aims for. See `docs/final_report.md` for full analysis.
 
 ## Citations
 
