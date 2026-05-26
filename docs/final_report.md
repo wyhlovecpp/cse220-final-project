@@ -151,6 +151,20 @@ The knee sits at **PF_THRESHOLD = 40 %** — about 3 % better than the paper's d
 
 We left `PF_THRESHOLD = 25` as the SPP default to match the paper; an end-user can opt into the knee with `--pref_spp_pf_threshold=40`.
 
+### 5.5 Does the knee generalise? Re-running every benchmark at PF_THRESHOLD = 40
+
+Re-ran all five benchmarks at `--pref_spp_pf_threshold=40` (script: `scripts/run_pf40_all.sh`, outputs: `results_pf40/`):
+
+| Benchmark | nopref | SPP @ pf=25 (default) | SPP @ pf=40 (knee) | knee vs default |
+|-|-|-|-|-|
+| `stride`     | 1.814 | 1.730 | **1.757** | +1.6 % |
+| `strided`    | 0.331 | 0.331 | 0.331     | ±0 % (noise band) |
+| `2dstencil`  | 2.536 | 2.720 | **2.751** | +1.1 % |
+| `linkedlist` | 0.049 | 0.169 | **0.174** | +3.0 % |
+| `random`     | 0.625 | 0.625 | 0.625     | ±0 % |
+
+**The knee is a strict improvement everywhere it matters** — never worse, 1–3 % better on the three benchmarks where SPP actually issues prefetches. On `random` the confidence gate already filters out 100 % of would-be prefetches at any threshold, so the knee makes no difference. This argues that 40 % is a better default than the paper's 25 % at least on this Scarab + Kaby-Lake configuration; the original paper picked 25 % against a different (larger) L2 and MSHR, so the right cutoff is plausibly machine-dependent.
+
 ## 6. Discussion
 
 The implementation closely follows the paper. The most impactful design constraint we hit was the **4 KB OS-page boundary**: a strictly sequential stream sees the chain reset every 64 cache lines, which caps SPP's coverage on workloads like `bench_stride`. Scarab's stride/stream prefetchers do not have this restriction because they operate on coarser 64 KB regions. This is consistent with the original paper's argument that SPP's *qualitative* niche is irregular patterns rather than pure streams; on Spec CPU 2006/2017 (which our PIN frontend cannot decode out of the box) the paper reports SPP > stride on many integer benchmarks.

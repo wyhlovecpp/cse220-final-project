@@ -149,6 +149,21 @@ Both manifested as SIGSEGV on `linkedlist` / `strided` at lookahead depth ≥ 4.
 
 ---
 
+## Does the knee generalise? — pf=40 on every benchmark
+
+| Benchmark | pf=25 (default) | **pf=40 (knee)** | Δ |
+|-|-|-|-|
+| stride     | 1.730 | **1.757** | +1.6 % |
+| strided    | 0.331 | 0.331     |  0 % |
+| 2dstencil  | 2.720 | **2.751** | +1.1 % |
+| linkedlist | 0.169 | **0.174** | +3.0 % |
+| random     | 0.625 | 0.625     |  0 % |
+
+- **pf=40 is never worse**, 1–3 % better on every workload where SPP issues prefetches.
+- The paper's 25 % was tuned against a different L2 / MSHR — 40 % looks like a strict win for this Scarab Kaby-Lake config.
+
+---
+
 ## What surprised us
 
 - **4 KB OS-page boundary** caps SPP on pure sequential streams (chain breaks every 64 lines). Stride/stream use coarser 64 KB regions and don't have this issue.

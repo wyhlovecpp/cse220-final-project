@@ -1,0 +1,34 @@
+Entering Fast Forward Mode: looking for start instruction
+Scarab gitrev: 5c58dea
+Listening for new clients
+accepting for new clients
+Server verified connection.
+Client verified connection.
+Unmapped instruction at EIP: 450544, opcode: BZHI, category: BMI2, opcode index: 65, hasrealrep: 0, is_lock: 0, num_ld: 0, num_st: 0, num_src_regs: 2, num_dst_regs: 2, num_ld1_addr_regs: 0, num_ld2_addr_regs: 0, num_st_addr_regs: 0, num_simd_lanes: 0, lane_width_bytes: 0. Look at README in pin/pin_lib on how to map new instructionsExiting Fast Forward mode: inst_count=6467495
+Scarab started at Tue May 26 16:49:36 2026
+
+Initialized Ramulator. 
+** Heartbeat:  20% -- { 2000003 } -- 0.00 KIPS (200.00 KIPS)
+** Heartbeat:  40% -- { 4000003 } -- 285.71 KIPS (235.29 KIPS)
+** Heartbeat:  60% -- { 6000003 } -- 250.00 KIPS (240.00 KIPS)
+** Heartbeat:  80% -- { 8000003 } -- 285.71 KIPS (250.00 KIPS)
+End of program reached, disconnect from Scarab.
+
+Pintool Fini Reached.
+
+** Core 0 Finished:    insts:10000000    cycles:5692789     time:1778996562500       -- 1.76 IPC (1.76 IPC) --  N/A  KIPS (256.41 KIPS)
+Scarab finished at Tue May 26 16:50:15 2026
+
+
+Launching Scarab:
+/data-2u-2/wyh/code/final_project/scarab/src/scarab --num_cores 1 --frontend pin_exec_driven --pin_exec_driven_fe_socket /tmp/Scarab_Temp_WorkDir_1yi2o7uu/socket --bindir /data-2u-2/wyh/code/final_project/scarab/bin --inst_limit 10000000 --heartbeat_interval 2000000 --num_heartbeats 5
+
+
+Core 0 is running program: /data-2u-2/wyh/code/final_project/benchmarks/bench_stride
+setarch x86_64 -R /data-2u-2/wyh/code/final_project/tools/pin-3.15-98253-gb56e429b1-gcc-linux/pin -mt 0 -t /data-2u-2/wyh/code/final_project/scarab/src/pin/pin_exec/obj-intel64/pin_exec.so -socket_path /tmp/Scarab_Temp_WorkDir_1yi2o7uu/socket -core_id 0 -fast_forward_to_start_inst 1 -- /data-2u-2/wyh/code/final_project/benchmarks/bench_stride
+
+RETURN CODE 0: /data-2u-2/wyh/code/final_project/scarab/src/scarab --num_cores 1 --frontend pin_exec_driven --pin_exec_driven_fe_socket /tmp/Scarab_Temp_WorkDir_1yi2o7uu/socket --bindir /data-2u-2/wyh/code/final_project/scarab/bin --inst_limit 10000000 --heartbeat_interval 2000000 --num_heartbeats 5
+
+RETURN CODE 0: setarch x86_64 -R /data-2u-2/wyh/code/final_project/tools/pin-3.15-98253-gb56e429b1-gcc-linux/pin -mt 0 -t /data-2u-2/wyh/code/final_project/scarab/src/pin/pin_exec/obj-intel64/pin_exec.so -socket_path /tmp/Scarab_Temp_WorkDir_1yi2o7uu/socket -core_id 0 -fast_forward_to_start_inst 1 -- /data-2u-2/wyh/code/final_project/benchmarks/bench_stride
+
+Notify: Scarab run terminated, cleaning up...
