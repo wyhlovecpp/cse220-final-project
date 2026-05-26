@@ -18,6 +18,7 @@ benchmarks/bench_random
 results/*/
 results/PARAMS.*.template
 results_ablation/
+results_sweep/
 
 # Stray stat files in repo root from accidental runs
 /*.stat.*
