@@ -120,6 +120,20 @@ Both manifested as SIGSEGV on `linkedlist` / `strided` at lookahead depth ≥ 4.
 
 ---
 
+## Ablation: what each piece contributes
+
+| Configuration | `linkedlist` | `2dstencil` |
+|-|-|-|
+| nopref                          | 1.00×     | 1.00×     |
+| **spp** (full)                  | **3.47×** | **1.07×** |
+| spp − lookahead (depth = 1)     | 1.56×     | 1.01×     |
+| spp − GHR (no page boot)        | 3.26×     | 1.07×     |
+
+- **Lookahead is the workhorse** — disabling it collapses the linked-list speedup from 3.47× to 1.56× (≈ 60 % of SPP's gain).
+- **GHR contributes ~6 %** on linked-list, ~0 % on the stencil — its 8 entries can't track all the pages a sweeping workload touches.
+
+---
+
 ## What surprised us
 
 - **4 KB OS-page boundary** caps SPP on pure sequential streams (chain breaks every 64 lines). Stride/stream use coarser 64 KB regions and don't have this issue.

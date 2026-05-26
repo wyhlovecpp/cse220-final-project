@@ -117,6 +117,21 @@ Accuracy and coverage closely track IPC. SPP holds **96–100 %** accuracy on ev
 
 The plots in `results/{speedup,ipc,l1_mpki,pref_accuracy,pref_coverage,spp_depth}.png` visualise the same numbers.
 
+### 5.3 Ablation: what each piece contributes
+
+We rebuilt SPP with each of its two optional sub-systems individually disabled (`--pref_spp_lookahead_on=0` and `--pref_spp_ghr_on=0`) and reran on the two most informative workloads (script: `scripts/run_ablation.sh`, outputs: `results_ablation/`):
+
+| Configuration | `linkedlist` IPC | speedup | `2dstencil` IPC | speedup |
+|-|-|-|-|-|
+| **nopref** (baseline)         | 0.049 | 1.00× | 2.536 | 1.00× |
+| `spp` (full algorithm)         | **0.169** | **3.47×** | **2.720** | **1.07×** |
+| `spp` − lookahead (depth = 1)  | 0.076 | 1.56× | 2.554 | 1.01× |
+| `spp` − GHR (no page-boot)     | 0.158 | 3.26× | 2.718 | 1.07× |
+
+* **Lookahead is the workhorse.** Disabling it (effectively reducing SPP to a 1-step confidence-filtered Markov prefetcher) collapses the linked-list speedup from 3.47× to 1.56×, and the stencil speedup from 1.07× to 1.01×. The path-confidence chain is responsible for ≈ 60 % of SPP's gain on linked-list and almost all of it on the stencil.
+* **GHR's contribution is small on these workloads.** On linked-list the GHR adds ≈ 6 % (the pool spans many pages and an 8-entry GHR can be evicted before the destination page is touched). On 2-D stencil it adds ≈ 0.1 % — surprising at first, but consistent with the page footprint: with W = 512 elements = exactly one OS page per row, *every* +W cross-row prefetch becomes a page-crossing, and the GHR with only 8 entries cannot retain enough history for thousands of distinct pages.
+* The conclusion: SPP's main lever is the **lookahead chain**, and the GHR matters most when the workload has *few* hot pages that get re-visited (something neither micro-benchmark fully exercises — both stream through their working set once).
+
 ## 6. Discussion
 
 The implementation closely follows the paper. The most impactful design constraint we hit was the **4 KB OS-page boundary**: a strictly sequential stream sees the chain reset every 64 cache lines, which caps SPP's coverage on workloads like `bench_stride`. Scarab's stride/stream prefetchers do not have this restriction because they operate on coarser 64 KB regions. This is consistent with the original paper's argument that SPP's *qualitative* niche is irregular patterns rather than pure streams; on Spec CPU 2006/2017 (which our PIN frontend cannot decode out of the box) the paper reports SPP > stride on many integer benchmarks.
