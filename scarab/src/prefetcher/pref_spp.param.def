@@ -1,0 +1,50 @@
+/* Copyright 2026 CSE220 Final Project Group
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to
+ * deal in the Software without restriction. Provided "AS IS" without warranty.
+ */
+
+/* -*- Mode: c -*- */
+
+/* Parameters for the Signature Path Prefetcher (SPP)
+ * Reference: J. Kim et al., "Path Confidence Based Lookahead Prefetching,"
+ * MICRO 2016.
+ */
+
+DEF_PARAM( pref_spp_on             , PREF_SPP_ON             , Flag , Flag , FALSE ,    )
+DEF_PARAM( debug_pref_spp          , DEBUG_PREF_SPP          , Flag , Flag , FALSE ,    )
+
+/* Functional knobs */
+DEF_PARAM( pref_spp_lookahead_on   , PREF_SPP_LOOKAHEAD_ON   , Flag , Flag , TRUE  ,    )
+DEF_PARAM( pref_spp_filter_on      , PREF_SPP_FILTER_ON      , Flag , Flag , TRUE  ,    )
+DEF_PARAM( pref_spp_ghr_on         , PREF_SPP_GHR_ON         , Flag , Flag , TRUE  ,    )
+
+/* Lookahead depth cap (paper has implicit cap = L2 MSHR size). */
+DEF_PARAM( pref_spp_max_depth      , PREF_SPP_MAX_DEPTH      , uns  , uns  , 16    ,    )
+
+/* Confidence thresholds (percent, 0-100). */
+DEF_PARAM( pref_spp_pf_threshold   , PREF_SPP_PF_THRESHOLD   , uns  , uns  , 25    ,    )
+DEF_PARAM( pref_spp_fill_threshold , PREF_SPP_FILL_THRESHOLD , uns  , uns  , 90    ,    )
+
+/* Signature Table dimensions. */
+DEF_PARAM( pref_spp_st_set         , PREF_SPP_ST_SET         , uns  , uns  , 1     ,    )
+DEF_PARAM( pref_spp_st_way         , PREF_SPP_ST_WAY         , uns  , uns  , 256   ,    )
+DEF_PARAM( pref_spp_st_tag_bit     , PREF_SPP_ST_TAG_BIT     , uns  , uns  , 16    ,    )
+DEF_PARAM( pref_spp_sig_shift      , PREF_SPP_SIG_SHIFT      , uns  , uns  , 3     ,    )
+DEF_PARAM( pref_spp_sig_bit        , PREF_SPP_SIG_BIT        , uns  , uns  , 12    ,    )
+DEF_PARAM( pref_spp_sig_delta_bit  , PREF_SPP_SIG_DELTA_BIT  , uns  , uns  , 7     ,    )
+
+/* Pattern Table dimensions. */
+DEF_PARAM( pref_spp_pt_set         , PREF_SPP_PT_SET         , uns  , uns  , 512   ,    )
+DEF_PARAM( pref_spp_pt_way         , PREF_SPP_PT_WAY         , uns  , uns  , 4     ,    )
+DEF_PARAM( pref_spp_c_sig_bit      , PREF_SPP_C_SIG_BIT      , uns  , uns  , 4     ,    )
+DEF_PARAM( pref_spp_c_delta_bit    , PREF_SPP_C_DELTA_BIT    , uns  , uns  , 4     ,    )
+
+/* Prefetch Filter (quotient filter) dimensions. */
+DEF_PARAM( pref_spp_quotient_bit   , PREF_SPP_QUOTIENT_BIT   , uns  , uns  , 10    ,    )
+DEF_PARAM( pref_spp_remainder_bit  , PREF_SPP_REMAINDER_BIT  , uns  , uns  , 6     ,    )
+
+/* GHR dimensions and global accuracy counters. */
+DEF_PARAM( pref_spp_ghr_entries    , PREF_SPP_GHR_ENTRIES    , uns  , uns  , 8     ,    )
+DEF_PARAM( pref_spp_global_ctr_bit , PREF_SPP_GLOBAL_CTR_BIT , uns  , uns  , 10    ,    )

@@ -1,0 +1,23 @@
+# Tooling
+tools/
+scarab/src/build/
+scarab/src/scarab
+scarab/src/pin/pin_exec/obj-intel64/
+scarab/src/deps/
+scarab/.git/
+scarab/build/
+
+# Compiled benchmarks
+benchmarks/bench_stride
+benchmarks/bench_strided
+benchmarks/bench_2dstencil
+benchmarks/bench_linkedlist
+benchmarks/bench_random
+
+# Experiment results (kept locally but not committed to keep repo small)
+results/*/
+results/PARAMS.*.template
+
+# Python
+__pycache__/
+*.pyc
