@@ -499,7 +499,7 @@ static void spp_operate(uns8 proc_id, Addr lineAddr) {
   } while(do_lookahead && depth < Q && PREF_SPP_LOOKAHEAD_ON);
 
   INC_STAT_EVENT(proc_id, PREF_SPP_LOOKAHEAD_DEPTH_TOTAL, depth);
-  STAT_EVENT(proc_id, PREF_SPP_LOOKAHEAD_DEPTH_MAX + (depth >= 9 ? 9 : depth));
+  STAT_EVENT(proc_id, PREF_SPP_LOOKAHEAD_DEPTH_0 + (depth >= 9 ? 9 : depth));
 }
 
 /* ============================================================ */
@@ -549,7 +549,15 @@ void pref_spp_init(HWP* hwp) {
 }
 
 void pref_spp_done(void) {
-  /* Memory deliberately not freed -- simulator about to exit. */
+  if(!spp) return;
+  for(uns s = 0; s < PREF_SPP_ST_SET; s++) free(spp->st[s]);
+  free(spp->st);
+  for(uns s = 0; s < PREF_SPP_PT_SET; s++) free(spp->pt[s].ways);
+  free(spp->pt);
+  free(spp->filter);
+  free(spp->ghr);
+  free(spp);
+  spp = NULL;
 }
 
 void pref_spp_ul1_miss(uns8 proc_id, Addr lineAddr, Addr loadPC,
