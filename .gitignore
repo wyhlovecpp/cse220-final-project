@@ -17,6 +17,13 @@ benchmarks/bench_random
 # Experiment results (kept locally but not committed to keep repo small)
 results/*/
 results/PARAMS.*.template
+results_ablation/
+
+# Stray stat files in repo root from accidental runs
+/*.stat.*
+/PARAMS.in
+/PARAMS.out
+/ramulator.stat.out
 
 # Python
 __pycache__/
