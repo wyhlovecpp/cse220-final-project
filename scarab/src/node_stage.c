@@ -41,6 +41,7 @@
 #include "bp/bp.h"
 #include "exec_ports.h"
 #include "frontend/frontend.h"
+#include "isa/isa.h"
 #include "memory/memory.h"
 #include "node_stage.h"
 #include "thread.h"

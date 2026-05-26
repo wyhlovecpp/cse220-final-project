@@ -173,6 +173,27 @@ def bar_grouped(rows, metric, ylabel, title, out_path, normalize_to=None):
     print(f"Wrote {out_path}")
 
 
+def text_summary(rows: list[dict], out_path: Path):
+    """Write a human-readable plain-text leaderboard, one section per benchmark."""
+    lines = ["# Headline numbers", ""]
+    for bench in BENCHES:
+        rs = [r for r in rows if r["bench"] == bench]
+        if not rs: continue
+        base_ipc = next((r["ipc"] for r in rs if r["config"] == "nopref"), 0)
+        lines.append(f"## {bench}")
+        lines.append(f"{'config':<10} {'IPC':>7} {'speedup':>8} {'MPKI':>7} "
+                     f"{'acc':>6} {'cov':>6} {'depth':>6}")
+        for r in rs:
+            speed = (r["ipc"] / base_ipc) if base_ipc else 0
+            lines.append(f"{r['config']:<10} {r['ipc']:>7.3f} {speed:>7.2f}x "
+                         f"{r['mpki']:>7.2f} {r.get('pref_accuracy',0):>6.2%} "
+                         f"{r.get('pref_coverage',0):>6.2%} "
+                         f"{r.get('spp_avg_depth',0):>6.2f}")
+        lines.append("")
+    out_path.write_text("\n".join(lines))
+    print(f"Wrote {out_path}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--results", default=str(DEFAULT_RESULTS))
@@ -182,6 +203,7 @@ def main():
     if not rows:
         sys.exit("No run results found under " + str(results_dir))
     write_csv(rows, results_dir / "summary.csv")
+    text_summary(rows, results_dir / "summary.txt")
     bar_grouped(rows, "ipc", "IPC", "Instruction-per-cycle by benchmark / config",
                 results_dir / "ipc.png")
     bar_grouped(rows, "ipc", "Speedup over no-prefetcher",

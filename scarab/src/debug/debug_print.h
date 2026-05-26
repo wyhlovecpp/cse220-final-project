@@ -55,7 +55,9 @@ void  print_op_field(FILE*, Op*, uns);
 void  print_field_tail(FILE*, uns);
 void  print_field_head(FILE*, uns);
 char* disasm_op(Op*, Flag wide);
-/* disasm_reg is declared in isa/isa.h with Reg_Id parameter; do not redeclare here */
+/* disasm_reg is declared in isa/isa.h with Reg_Id (enum) parameter; any TU
+ * that uses it must include isa/isa.h explicitly. We keep this comment to
+ * document the intent and to ensure the old uns-typed prototype is gone. */
 
 
 /**************************************************************************************/

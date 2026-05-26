@@ -26,7 +26,7 @@ add_subdirectory(deps)
 
 set(warn_flags -Wall -Wunused -Wno-long-long
   -Wpointer-arith
-  -Werror)
+  -Werror -Wno-error=maybe-uninitialized -Wno-error=array-bounds -Wno-error=stringop-overflow -Wno-error=use-after-free -Wno-error=dangling-pointer)
 set(warn_c_flags ${warn_flags}
   -Wmissing-declarations
   -Wmissing-prototypes

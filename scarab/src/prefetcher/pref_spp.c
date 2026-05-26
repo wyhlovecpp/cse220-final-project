@@ -418,26 +418,24 @@ static void spp_operate(uns8 proc_id, Addr lineAddr) {
   const uns Q = PREF_SPP_MAX_DEPTH;
   if(Q == 0) return;
 
-  /* The pf queue is grown by up to PT_WAY entries per outer iteration and
-   * never shrinks (matching the ChampSim reference). With up to Q outer
-   * iterations, we therefore need Q * PT_WAY slots. */
-  const uns QLEN = Q * PREF_SPP_PT_WAY + 4;
+  /* Per-iter scratch space for read_pattern's outputs (PT_WAY entries
+   * possible). We reset head/tail every outer iteration so the queue never
+   * grows -- this avoids subtle overflow regardless of MAX_DEPTH or the PT
+   * fan-out at any one signature. */
+  const uns QLEN = PREF_SPP_PT_WAY + 1;
   int* delta_q = (int*)alloca(sizeof(int) * QLEN);
   uns* conf_q  = (uns*)alloca(sizeof(uns) * QLEN);
-  for(uns i = 0; i < QLEN; i++) { delta_q[i] = 0; conf_q[i] = 0; }
-  conf_q[0] = 100;  /* prime path confidence for first hop. */
 
   Addr base_addr      = addr;
   uns  lookahead_conf = 100;
-  uns  pf_q_head      = 0;
-  uns  pf_q_tail      = 0;
   uns  depth          = 0;
   Flag do_lookahead   = FALSE;
 
   do {
     uns lookahead_way = PREF_SPP_PT_WAY;
-    /* Defensive: if we've already filled the queue, stop. */
-    if(pf_q_tail + PREF_SPP_PT_WAY > QLEN) break;
+    uns pf_q_head     = 0;
+    uns pf_q_tail     = 0;
+    for(uns i = 0; i < QLEN; i++) { delta_q[i] = 0; conf_q[i] = 0; }
     spp_pt_read_pattern(curr_sig, delta_q, conf_q, &lookahead_way,
                         &lookahead_conf, &pf_q_tail, depth);
 
