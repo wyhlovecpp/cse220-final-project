@@ -134,6 +134,21 @@ Both manifested as SIGSEGV on `linkedlist` / `strided` at lookahead depth ≥ 4.
 
 ---
 
+## Parameter sweep: PF_THRESHOLD knee
+
+| `PF_THRESHOLD` | IPC | speedup | accuracy | avg depth |
+|-|-|-|-|-|
+| 10 % | 0.165 | 3.39× | 100 % | 15.9 (cap) |
+| **25 %** (default) | 0.169 | 3.47× | 100 % | 12.3 |
+| **40 %** (knee)    | **0.174** | **3.57×** | 100 % | 8.3 |
+| 60 % | 0.166 | 3.41× | 100 % | 4.5 |
+| 80 % | 0.099 | 2.03× | 97 % | 1.5 |
+
+- The **paper's default 25 % is safe but not the knee**: 40 % is mildly better on a workload where every link is 100 %-confident.
+- Too aggressive (10 %) saturates the L2 queue; too conservative (80 %) collapses depth to ~1 and halves coverage.
+
+---
+
 ## What surprised us
 
 - **4 KB OS-page boundary** caps SPP on pure sequential streams (chain breaks every 64 lines). Stride/stream use coarser 64 KB regions and don't have this issue.

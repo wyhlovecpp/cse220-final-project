@@ -132,6 +132,25 @@ We rebuilt SPP with each of its two optional sub-systems individually disabled (
 * **GHR's contribution is small on these workloads.** On linked-list the GHR adds ≈ 6 % (the pool spans many pages and an 8-entry GHR can be evicted before the destination page is touched). On 2-D stencil it adds ≈ 0.1 % — surprising at first, but consistent with the page footprint: with W = 512 elements = exactly one OS page per row, *every* +W cross-row prefetch becomes a page-crossing, and the GHR with only 8 entries cannot retain enough history for thousands of distinct pages.
 * The conclusion: SPP's main lever is the **lookahead chain**, and the GHR matters most when the workload has *few* hot pages that get re-visited (something neither micro-benchmark fully exercises — both stream through their working set once).
 
+### 5.4 PF_THRESHOLD sweep — finding the design knee
+
+The paper picks `PF_THRESHOLD = 25 %` for the per-hop confidence cutoff at which SPP issues a prefetch. We swept it on `linkedlist` (script: `scripts/run_threshold_sweep.sh`):
+
+| PF_THRESHOLD | IPC | Speedup | Accuracy | Avg lookahead depth |
+|-|-|-|-|-|
+| 10 % (more aggressive)  | 0.165 | 3.39× | 100.0 % | 15.94 |
+| **25 %** (paper default) | 0.169 | 3.47× | 100.0 % | 12.28 |
+| **40 %** (knee)          | **0.174** | **3.57×** | 100.0 % | 8.25 |
+| 60 %                     | 0.166 | 3.41× | 100.0 % | 4.46 |
+| 80 % (very conservative) | 0.099 | 2.03× | 96.8 % | 1.46 |
+
+The knee sits at **PF_THRESHOLD = 40 %** — about 3 % better than the paper's default on this benchmark, with the same 100 % accuracy. Two observations:
+
+* **More aggressive ≠ better.** At PF_THRESHOLD = 10 % the chain runs to its `MAX_DEPTH = 16` cap (avg depth 15.94) but doesn't translate into IPC, because the L2 request queue (128 entries) saturates and excess prefetches get dropped.
+* **Too conservative collapses fast.** At 80 % the chain stops at depth ≈ 1.5 and we lose half of SPP's coverage, dropping IPC to 0.099 (only 2× over nopref). The paper's choice of 25 % is a safe default; 40 % is mildly better on linked-list because *every* link in the chain is a 100 %-confidence prediction once the +1/+2 alternating delta is learned, so it's safe to filter more aggressively.
+
+We left `PF_THRESHOLD = 25` as the SPP default to match the paper; an end-user can opt into the knee with `--pref_spp_pf_threshold=40`.
+
 ## 6. Discussion
 
 The implementation closely follows the paper. The most impactful design constraint we hit was the **4 KB OS-page boundary**: a strictly sequential stream sees the chain reset every 64 cache lines, which caps SPP's coverage on workloads like `bench_stride`. Scarab's stride/stream prefetchers do not have this restriction because they operate on coarser 64 KB regions. This is consistent with the original paper's argument that SPP's *qualitative* niche is irregular patterns rather than pure streams; on Spec CPU 2006/2017 (which our PIN frontend cannot decode out of the box) the paper reports SPP > stride on many integer benchmarks.
