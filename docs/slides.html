@@ -457,6 +457,54 @@ addr        | sig 12b|   |  Δ + cΔ|        threshold = 25 %
 <li>Tuning to (pf=40, d=8) cuts the harm in half. A proper LLC-grade threshold would close the gap fully — paper doesn't specify it.</li>
 </ul>
 <p>Nuances our "SPP does no harm" claim: uniformly random ⇒ no harm; mildly-misleading patterns ⇒ a few % leakage.</p></section>
+<section><h2>Validating the fix — PF_THRESHOLD sweep on hashtable</h2>
+<table>
+<thead>
+<tr>
+<th>pf</th>
+<th>hashtable IPC</th>
+<th>Δ vs nopref</th>
+<th>LLC-grade prefetches</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>25 (paper default)</td>
+<td>0.328</td>
+<td>−1.5 %</td>
+<td>325 K</td>
+</tr>
+<tr>
+<td>40 (tuned)</td>
+<td>0.331</td>
+<td>−0.5 %</td>
+<td>139 K</td>
+</tr>
+<tr>
+<td>60</td>
+<td>0.332</td>
+<td>−0.1 %</td>
+<td>13 K</td>
+</tr>
+<tr>
+<td><strong>80</strong></td>
+<td><strong>0.333</strong></td>
+<td><strong>0</strong></td>
+<td><strong>6</strong></td>
+</tr>
+<tr>
+<td>90</td>
+<td>0.333</td>
+<td>0</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>IPC tracks the LLC-grade prefetch count <strong>exactly</strong> — at pf=80 they collapse to 6 and the regression vanishes.</li>
+<li>At pf=90 SPP is fully silent on this workload — the <em>correct</em> behavior on truly unstructured access.</li>
+<li>Paper only specifies <em>one</em> threshold; what's missing is a per-workload <strong>issue cutoff</strong>.</li>
+</ul></section>
 <section><h2>What surprised us</h2>
 <ul>
 <li><strong>4 KB OS-page boundary</strong> caps SPP on pure sequential streams (chain breaks every 64 lines). Stride/stream use coarser 64 KB regions and don't have this issue.</li>

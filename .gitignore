@@ -25,6 +25,7 @@ results_depth/
 results_extras/
 results_sigdelta/
 results_tuned/
+results_ht_pf/
 
 # Stray stat files in repo root from accidental runs
 /*.stat.*

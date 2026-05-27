@@ -243,6 +243,22 @@ Nuances our "SPP does no harm" claim: uniformly random ⇒ no harm; mildly-misle
 
 ---
 
+## Validating the fix — PF_THRESHOLD sweep on hashtable
+
+| pf | hashtable IPC | Δ vs nopref | LLC-grade prefetches |
+|-|-|-|-|
+| 25 (paper default) | 0.328 | −1.5 % | 325 K |
+| 40 (tuned)         | 0.331 | −0.5 % | 139 K |
+| 60                 | 0.332 | −0.1 % | 13 K  |
+| **80**             | **0.333** | **0** | **6** |
+| 90                 | 0.333 | 0 | 0 |
+
+- IPC tracks the LLC-grade prefetch count **exactly** — at pf=80 they collapse to 6 and the regression vanishes.
+- At pf=90 SPP is fully silent on this workload — the *correct* behavior on truly unstructured access.
+- Paper only specifies *one* threshold; what's missing is a per-workload **issue cutoff**.
+
+---
+
 ## What surprised us
 
 - **4 KB OS-page boundary** caps SPP on pure sequential streams (chain breaks every 64 lines). Stride/stream use coarser 64 KB regions and don't have this issue.

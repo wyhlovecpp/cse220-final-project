@@ -266,6 +266,23 @@ So even though SPP's confidence gate is working as designed, the within-bucket c
 
 This nuances our earlier "SPP does no harm" claim: SPP does *no measurable harm* on uniformly random access (`random` benchmark), but on workloads that *look* mildly predictable but aren't (like hash-table chain walking), it can leak a few percent of IPC.
 
+### 5.11 Validating the LLC-threshold hypothesis on hashtable
+
+We tested the hypothesis from §5.10 directly — sweep `PF_THRESHOLD` upward on `hashtable` and watch the LLC-grade prefetches drop, IPC recover (script: `scripts/run_hashtable_threshold.sh`):
+
+| PF_THRESHOLD | hashtable IPC | speedup | UL1 sent | L2-grade (>90%) | LLC-grade (≥pf) |
+|-|-|-|-|-|-|
+| 25 (paper default) | 0.328 | 0.985× (−1.5 %) | 324 489 | 31 | 325 106 |
+| 40 (tuned earlier) | 0.331 | 0.994× (−0.5 %) | 138 573 | 42 | 139 036 |
+| 60                 | 0.332 | 0.997× (−0.1 %) | 12 795 | 30 | 13 026 |
+| **80**             | **0.333** | **1.000× (clean)** | **6** | **0** | **6** |
+| 90                 | 0.333 | 1.000× | 0 | 0 | 0 |
+| 95                 | 0.333 | 1.000× | 0 | 0 | 0 |
+
+**Hypothesis confirmed.** The LLC-grade prefetch count drops monotonically with the threshold (325 K → 139 K → 13 K → 6 → 0), and the IPC regression vanishes in lockstep. At `pf=80`, SPP issues only six speculative prefetches (all sub-FILL_THRESHOLD, so LLC-grade) over the entire 10 M-instruction run, and these six cost nothing measurable. By `pf=90`, the gate completely silences SPP on this workload — which is the correct outcome: a workload with no learnable structure should get no prefetches.
+
+**The wider lesson:** SPP's design has *two* threshold knobs — `PF_THRESHOLD` (issue at all) and `FILL_THRESHOLD` (issue as L2- or LLC-grade) — but the paper only specifies one (`PF_THRESHOLD = 25`) and lets `FILL_THRESHOLD = 90` define the L2/LLC boundary. On workloads with confidence-mass concentrated in the 25–90 % band (like our hashtable, where the chain walk has some pattern but not enough to merit L2-grade prefetches), this leaks LLC-grade prefetches that pollute slightly. A more nuanced design would expose a separate **issue cutoff** that can be tuned per workload class — at `issue=80` on hashtable, SPP is essentially "off" and the regression disappears.
+
 ## 6. Discussion
 
 The implementation closely follows the paper. The most impactful design constraint we hit was the **4 KB OS-page boundary**: a strictly sequential stream sees the chain reset every 64 cache lines, which caps SPP's coverage on workloads like `bench_stride`. Scarab's stride/stream prefetchers do not have this restriction because they operate on coarser 64 KB regions. This is consistent with the original paper's argument that SPP's *qualitative* niche is irregular patterns rather than pure streams; on Spec CPU 2006/2017 (which our PIN frontend cannot decode out of the box) the paper reports SPP > stride on many integer benchmarks.
