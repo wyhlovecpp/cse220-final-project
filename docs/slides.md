@@ -211,6 +211,20 @@ SPP sits in the top tier — within 4 % of the best (stride) and ahead of every 
 
 ---
 
+## The composed knee — `pf=40, d=8` on every benchmark
+
+| Benchmark | Paper default<br>(pf=25, d=16) | **Both knees**<br>(pf=40, d=8) | improvement |
+|-|-|-|-|
+| stride     | 1.730 | **1.773** | +2.5 % |
+| strided    | 0.331 | 0.331     |   0    |
+| 2dstencil  | 2.720 | **2.773** | +1.9 % |
+| linkedlist | 0.169 | **0.176** | +4.1 % |
+| random     | 0.625 | 0.625     |   0    |
+
+**The two knees compose** — `pf=40, d=8` is the best SPP we found on every benchmark, beating the paper's default by 1.9 – 4.1 % with no regression anywhere.
+
+---
+
 ## What surprised us
 
 - **4 KB OS-page boundary** caps SPP on pure sequential streams (chain breaks every 64 lines). Stride/stream use coarser 64 KB regions and don't have this issue.

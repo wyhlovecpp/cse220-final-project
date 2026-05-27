@@ -229,6 +229,20 @@ We compared SPP against the remaining Scarab built-in prefetchers (`ghb`, `marko
 
 SPP sits in the top tier alongside stride and stream — within 4 % of stride, ahead of `ghb` (the closest comparable history-based prefetcher) by 27 %.
 
+### 5.9 The composed knee — `pf=40, depth=8` on every benchmark
+
+§5.4 found `pf=40` is the threshold knee, §5.6 found `depth=8` is the cap knee. We never combined them; we test that here (script: `scripts/run_combined_knee.sh`, outputs: `results_tuned/`):
+
+| Benchmark | nopref | **SPP paper default**<br>(pf=25, d=16) | SPP one-knob<br>(pf=40, d=16) | **SPP both knees**<br>(pf=40, d=8) | combined vs default |
+|-|-|-|-|-|-|
+| `stride`     | 1.814 | 1.730 | 1.757 | **1.773** | +2.5 % |
+| `strided`    | 0.331 | 0.331 | 0.331 | 0.331     |   0    |
+| `2dstencil`  | 2.536 | 2.720 | 2.751 | **2.773** | +1.9 % |
+| `linkedlist` | 0.049 | 0.169 | 0.174 | **0.176** | +4.1 % |
+| `random`     | 0.625 | 0.625 | 0.625 | 0.625     |   0    |
+
+**The two knees compose without conflict** — `pf=40, depth=8` is the best SPP configuration we found on every benchmark where SPP issues prefetches, beating the paper's default by 1.9 %–4.1 % with no regression elsewhere. This is the *final* SPP design point we recommend for this Scarab + Kaby-Lake configuration; users can flip on both via `--pref_spp_pf_threshold=40 --pref_spp_max_depth=8`.
+
 ## 6. Discussion
 
 The implementation closely follows the paper. The most impactful design constraint we hit was the **4 KB OS-page boundary**: a strictly sequential stream sees the chain reset every 64 cache lines, which caps SPP's coverage on workloads like `bench_stride`. Scarab's stride/stream prefetchers do not have this restriction because they operate on coarser 64 KB regions. This is consistent with the original paper's argument that SPP's *qualitative* niche is irregular patterns rather than pure streams; on Spec CPU 2006/2017 (which our PIN frontend cannot decode out of the box) the paper reports SPP > stride on many integer benchmarks.

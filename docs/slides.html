@@ -370,6 +370,50 @@ addr        | sig 12b|   |  Δ + cΔ|        threshold = 25 %
 </tbody>
 </table>
 <p>SPP sits in the top tier — within 4 % of the best (stride) and ahead of every other history-based prefetcher.</p></section>
+<section><h2>The composed knee — <code>pf=40, d=8</code> on every benchmark</h2>
+<table>
+<thead>
+<tr>
+<th>Benchmark</th>
+<th>Paper default<br>(pf=25, d=16)</th>
+<th><strong>Both knees</strong><br>(pf=40, d=8)</th>
+<th>improvement</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>stride</td>
+<td>1.730</td>
+<td><strong>1.773</strong></td>
+<td>+2.5 %</td>
+</tr>
+<tr>
+<td>strided</td>
+<td>0.331</td>
+<td>0.331</td>
+<td>0</td>
+</tr>
+<tr>
+<td>2dstencil</td>
+<td>2.720</td>
+<td><strong>2.773</strong></td>
+<td>+1.9 %</td>
+</tr>
+<tr>
+<td>linkedlist</td>
+<td>0.169</td>
+<td><strong>0.176</strong></td>
+<td>+4.1 %</td>
+</tr>
+<tr>
+<td>random</td>
+<td>0.625</td>
+<td>0.625</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<p><strong>The two knees compose</strong> — <code>pf=40, d=8</code> is the best SPP we found on every benchmark, beating the paper's default by 1.9 – 4.1 % with no regression anywhere.</p></section>
 <section><h2>What surprised us</h2>
 <ul>
 <li><strong>4 KB OS-page boundary</strong> caps SPP on pure sequential streams (chain breaks every 64 lines). Stride/stream use coarser 64 KB regions and don't have this issue.</li>
