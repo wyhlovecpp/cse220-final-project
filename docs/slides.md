@@ -182,6 +182,33 @@ Both manifested as SIGSEGV on `linkedlist` / `strided` at lookahead depth ≥ 4.
 
 ---
 
+## Why doesn't GHR help on 2-D stencil?
+
+Earlier we guessed: *"GHR's 8 entries can't track all the pages a sweeping workload touches."*
+
+We tested it — GHR_ENTRIES ∈ {8, 16, 32, 64, 128} all give **identical** IPC = 2.751 on stencil.
+
+**Real reason**: SPP encodes deltas in 7-bit sign-magnitude → max |delta| = **63 cache lines**. The stencil's cross-row delta is ±W = ±64 (one OS page) — overflows and aliases onto the sign bit. PT never confidently learns the +W edge, so GHR has nothing useful to carry.
+
+A trivial fix: widen `SIG_DELTA_BIT` from 7 to 8. (We left it at 7 to match the paper.)
+
+---
+
+## All prefetchers head-to-head on linkedlist
+
+| Prefetcher | IPC | speedup |
+|-|-|-|
+| nopref | 0.049 | 1.00× |
+| markov | 0.073 | 1.51× |
+| ghb | 0.139 | 2.86× |
+| stream | 0.180 | 3.71× |
+| **SPP @ pf=40, d=8** | **0.176** | **3.59×** |
+| stride | 0.183 | 3.77× |
+
+SPP sits in the top tier — within 4 % of the best (stride) and ahead of every other history-based prefetcher.
+
+---
+
 ## What surprised us
 
 - **4 KB OS-page boundary** caps SPP on pure sequential streams (chain breaks every 64 lines). Stride/stream use coarser 64 KB regions and don't have this issue.

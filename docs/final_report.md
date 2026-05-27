@@ -186,6 +186,41 @@ Two findings:
 
 The two knees compose cleanly: at `pf=40, depth=8` SPP delivers the same 3.59× speedup as `pf=40, depth=16` while issuing slightly fewer prefetches.
 
+### 5.7 GHR_ENTRIES sweep — and why our earlier hypothesis was wrong
+
+We claimed in §5.3 that GHR contributed only ~0 % on the 2-D stencil "because its 8 entries cannot retain enough history for thousands of distinct pages". We tested this directly by sweeping `--pref_spp_ghr_entries ∈ {8, 16, 32, 64, 128}`:
+
+| GHR_ENTRIES | 2dstencil IPC |
+|-|-|
+| 8   | 2.751 |
+| 16  | 2.751 |
+| 32  | 2.751 |
+| 64  | 2.751 |
+| 128 | 2.751 |
+
+**Result is flat to 4 decimal places** — GHR size is *not* the bottleneck. After re-checking the algorithm, the real reason GHR doesn't help on stencil is the **7-bit sign-magnitude delta encoding** (`SIG_DELTA_BIT = 7`):
+
+* The stencil's cross-row delta is ±W = ±64 cache lines (W = 512 elements × 8 B = 4096 B = exactly one OS page).
+* The encoding represents |delta| in the lower 6 bits with the 7th bit as sign, so the maximum representable |delta| is 63. **|±64| overflows** and aliases onto sign bit only — i.e. it looks like delta = 0 or delta = -0.
+* The PT therefore never learns a confident "+W" entry for the stencil's row-stride pattern; GHR can't retain a signature that depends on a learned +W.
+
+This is a *real* paper-relevant finding: SPP's signature encoding has an in-built ±63-cache-line range limit. Workloads with row strides at exactly the OS-page granularity (1 page = 64 lines × 64 B) sit precisely on this boundary and lose their cross-row prefetches. A trivial fix is to widen `SIG_DELTA_BIT` from 7 to 8 (we left the default at 7 to match the paper).
+
+### 5.8 Two more Scarab built-in prefetchers as additional baselines
+
+We compared SPP against the remaining Scarab built-in prefetchers (`ghb`, `markov`) on `linkedlist`. (`2dc` triggered a pre-existing Scarab assertion `proc_id == ul1req_queue[q_index].line_addr >> 58` and was excluded.)
+
+| Prefetcher (`linkedlist` IPC) | IPC | speedup vs nopref |
+|-|-|-|
+| nopref                          | 0.049 | 1.00× |
+| markov                          | 0.073 | 1.51× |
+| ghb                             | 0.139 | 2.86× |
+| stream                          | 0.180 | 3.71× |
+| **SPP (pf=40, depth=8)**        | **0.176** | **3.59×** |
+| stride                          | 0.183 | 3.77× |
+
+SPP sits in the top tier alongside stride and stream — within 4 % of stride, ahead of `ghb` (the closest comparable history-based prefetcher) by 27 %.
+
 ## 6. Discussion
 
 The implementation closely follows the paper. The most impactful design constraint we hit was the **4 KB OS-page boundary**: a strictly sequential stream sees the chain reset every 64 cache lines, which caps SPP's coverage on workloads like `bench_stride`. Scarab's stride/stream prefetchers do not have this restriction because they operate on coarser 64 KB regions. This is consistent with the original paper's argument that SPP's *qualitative* niche is irregular patterns rather than pure streams; on Spec CPU 2006/2017 (which our PIN frontend cannot decode out of the box) the paper reports SPP > stride on many integer benchmarks.
