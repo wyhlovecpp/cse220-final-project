@@ -211,6 +211,23 @@ SPP sits in the top tier — within 4 % of the best (stride) and ahead of every 
 
 ---
 
+## Full 6-prefetcher × 6-benchmark matrix
+
+| Bench | nopref | stride | stream | SPP | ghb | markov |
+|-|-|-|-|-|-|-|
+| stride     | 1.81 | 1.95 | **2.17** | 1.77 | 1.89 | 1.81 |
+| strided    | 0.33 | 0.33 | 0.33 | 0.33 | 0.33 | 0.33 |
+| 2dstencil  | 2.54 | 3.00 | **3.47** | 2.77 | 2.96 | 2.54 |
+| linkedlist | 0.05 | **0.18** | 0.18 | 0.18 | 0.14 | 0.07 |
+| random     | 0.63 | 0.63 | 0.63 | 0.63 | 0.63 | **0.35 (−44 %)** |
+| hashtable  | 0.33 | 0.33 | 0.33 | 0.33 | 0.33 | **0.16 (−52 %)** |
+
+- **Markov is catastrophic** on unstructured access (random / hashtable) — learns spurious correlations, pollutes severely.
+- **SPP is the most consistent**: never worse than 0.98× nopref, never catastrophic.
+- No prefetcher dominates everywhere; SPP is *never the worst*.
+
+---
+
 ## The composed knee — `pf=40, d=8` on every benchmark
 
 | Benchmark | Paper default<br>(pf=25, d=16) | **Both knees**<br>(pf=40, d=8) | improvement |

@@ -27,6 +27,7 @@ results_sigdelta/
 results_tuned/
 results_ht_pf/
 results_issue/
+results_alt/
 
 # Stray stat files in repo root from accidental runs
 /*.stat.*
