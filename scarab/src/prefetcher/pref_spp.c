@@ -440,11 +440,21 @@ static void spp_operate(uns8 proc_id, Addr lineAddr) {
                         &lookahead_conf, &pf_q_tail, depth);
 
     do_lookahead = FALSE;
+    /* Issue cutoff: callers can set ISSUE_THRESHOLD > PF_THRESHOLD to mute
+     * low-confidence LLC-grade prefetches without shortening the lookahead
+     * chain. ISSUE_THRESHOLD = 0 means "use PF_THRESHOLD" (paper default). */
+    uns issue_cutoff = PREF_SPP_ISSUE_THRESHOLD
+                         ? PREF_SPP_ISSUE_THRESHOLD : PREF_SPP_PF_THRESHOLD;
     while(pf_q_head < pf_q_tail) {
       uns this_conf = conf_q[pf_q_head];
       int this_delta = delta_q[pf_q_head];
       pf_q_head++;
-      if(this_conf < PREF_SPP_PF_THRESHOLD) continue;
+      if(this_conf < issue_cutoff) {
+        /* Below the issue cutoff: still keep the chain alive so deeper hops
+         * get a chance, but don't issue this prefetch. */
+        do_lookahead = TRUE;
+        continue;
+      }
 
       Addr pf_addr = (base_addr & ~((Addr)(DCACHE_LINE_SIZE - 1))) +
                      ((Addr)((int64)this_delta << log2_line));

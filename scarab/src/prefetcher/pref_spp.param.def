@@ -23,9 +23,21 @@ DEF_PARAM( pref_spp_ghr_on         , PREF_SPP_GHR_ON         , Flag , Flag , TRU
 /* Lookahead depth cap (paper has implicit cap = L2 MSHR size). */
 DEF_PARAM( pref_spp_max_depth      , PREF_SPP_MAX_DEPTH      , uns  , uns  , 16    ,    )
 
-/* Confidence thresholds (percent, 0-100). */
-DEF_PARAM( pref_spp_pf_threshold   , PREF_SPP_PF_THRESHOLD   , uns  , uns  , 25    ,    )
-DEF_PARAM( pref_spp_fill_threshold , PREF_SPP_FILL_THRESHOLD , uns  , uns  , 90    ,    )
+/* Confidence thresholds (percent, 0-100).
+ *
+ *   PF_THRESHOLD     -- gate for the *lookahead chain*: a path candidate
+ *                       below this is dropped from the queue and the chain
+ *                       does not extend through it. (paper default 25)
+ *   ISSUE_THRESHOLD  -- gate for *actually issuing* a prefetch. Set to 0
+ *                       (or equal to PF_THRESHOLD) to keep paper behaviour;
+ *                       set higher to mute low-confidence LLC-grade
+ *                       prefetches that would otherwise leak on workloads
+ *                       like the hashtable benchmark.
+ *   FILL_THRESHOLD   -- chosen prefetch fills L2 (>=) vs LLC (<). (paper default 90)
+ */
+DEF_PARAM( pref_spp_pf_threshold    , PREF_SPP_PF_THRESHOLD    , uns , uns , 25    , )
+DEF_PARAM( pref_spp_issue_threshold , PREF_SPP_ISSUE_THRESHOLD , uns , uns , 0     , )
+DEF_PARAM( pref_spp_fill_threshold  , PREF_SPP_FILL_THRESHOLD  , uns , uns , 90    , )
 
 /* Signature Table dimensions. */
 DEF_PARAM( pref_spp_st_set         , PREF_SPP_ST_SET         , uns  , uns  , 1     ,    )

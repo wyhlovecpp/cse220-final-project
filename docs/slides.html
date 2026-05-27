@@ -505,6 +505,40 @@ addr        | sig 12b|   |  Δ + cΔ|        threshold = 25 %
 <li>At pf=90 SPP is fully silent on this workload — the <em>correct</em> behavior on truly unstructured access.</li>
 <li>Paper only specifies <em>one</em> threshold; what's missing is a per-workload <strong>issue cutoff</strong>.</li>
 </ul></section>
+<section><h2>We built the fix — and proved it doesn't generalise</h2>
+<p>Added a new <code>PREF_SPP_ISSUE_THRESHOLD</code> knob (decoupled from <code>PF_THRESHOLD</code>): chain still extends through low-conf hops, but the <em>prefetch issue</em> is gated.</p>
+<table>
+<thead>
+<tr>
+<th>Bench</th>
+<th>tuned (off)</th>
+<th>issue=60</th>
+<th>issue=80</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>linkedlist</td>
+<td>0.176</td>
+<td>0.166 (−5.7 %)</td>
+<td><strong>0.099 (−43.7 %)</strong></td>
+</tr>
+<tr>
+<td>2dstencil</td>
+<td>2.773</td>
+<td>2.664 (−3.9 %)</td>
+<td>2.573 (−7.2 %)</td>
+</tr>
+<tr>
+<td>hashtable</td>
+<td>0.331</td>
+<td>0.332</td>
+<td><strong>0.333 (full fix)</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Negative result</strong>: issue=80 fixes hashtable but devastates linkedlist. The chain's late hops have confidence ∈ [50, 80] on productive workloads — useful there, polluting on hashtable. A pure confidence cutoff cannot tell them apart.</p>
+<p><strong>The right fix needs <em>accuracy</em>-based filtering</strong> — exactly what SPP+PPF [Bhatia ISCA'19] does.</p></section>
 <section><h2>What surprised us</h2>
 <ul>
 <li><strong>4 KB OS-page boundary</strong> caps SPP on pure sequential streams (chain breaks every 64 lines). Stride/stream use coarser 64 KB regions and don't have this issue.</li>

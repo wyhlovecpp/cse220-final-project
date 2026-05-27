@@ -283,6 +283,38 @@ We tested the hypothesis from §5.10 directly — sweep `PF_THRESHOLD` upward on
 
 **The wider lesson:** SPP's design has *two* threshold knobs — `PF_THRESHOLD` (issue at all) and `FILL_THRESHOLD` (issue as L2- or LLC-grade) — but the paper only specifies one (`PF_THRESHOLD = 25`) and lets `FILL_THRESHOLD = 90` define the L2/LLC boundary. On workloads with confidence-mass concentrated in the 25–90 % band (like our hashtable, where the chain walk has some pattern but not enough to merit L2-grade prefetches), this leaks LLC-grade prefetches that pollute slightly. A more nuanced design would expose a separate **issue cutoff** that can be tuned per workload class — at `issue=80` on hashtable, SPP is essentially "off" and the regression disappears.
 
+### 5.12 We built the fix — and proved it doesn't generalise
+
+To go beyond hypothesising, we actually *implemented* the proposed knob: a new `PREF_SPP_ISSUE_THRESHOLD` parameter, decoupled from `PF_THRESHOLD`. The change is a few lines in `pref_spp.c`:
+
+```c
+uns issue_cutoff = PREF_SPP_ISSUE_THRESHOLD
+                     ? PREF_SPP_ISSUE_THRESHOLD : PREF_SPP_PF_THRESHOLD;
+...
+if(this_conf < issue_cutoff) {
+  do_lookahead = TRUE;   /* keep the chain alive */
+  continue;              /* but don't issue this prefetch */
+}
+```
+
+The chain still extends through low-confidence hops (so deeper, higher-confidence predictions are still discoverable); only the actual prefetch issue is gated. Default `ISSUE_THRESHOLD = 0` falls back to `PF_THRESHOLD` (no behaviour change).
+
+We then re-ran three representative benchmarks at `issue ∈ {0 (off), 60, 80}` with `pf=40, depth=8`:
+
+| Benchmark | `tuned`<br>(issue off) | `issue=60` | `issue=80` |
+|-|-|-|-|
+| `linkedlist`  | 0.176 | 0.166 (−5.7 %) | **0.099 (−43.7 %)** |
+| `2dstencil`   | 2.773 | 2.664 (−3.9 %) | 2.573 (−7.2 %) |
+| `hashtable`   | 0.331 | 0.332 (+0.3 %) | **0.333 (== nopref, full fix)** |
+
+**The new knob works exactly as intended on `hashtable`** — at `issue=80` the regression disappears completely. But the same setting **devastates** `linkedlist` (−43.7 %) and significantly hurts `2dstencil` (−7.2 %).
+
+Why? Because on `linkedlist` the path-confidence chain decays geometrically with α and depth: hop 1 is ~95 %, hop 2 ~80 %, hop 3 ~70 %, …, hop 8 ~50 %. Most of the prefetches that matter for hiding DRAM latency sit in the 50–80 % band — exactly the band `issue=80` filters out. The chain's tail is *useful on productive workloads* and *polluting on near-random workloads*, and a pure confidence cutoff can't tell them apart.
+
+**The honest conclusion:** the `ISSUE_THRESHOLD` knob is a useful *workload-class-specific* tuning lever (perfect for hashtable when you know in advance the access pattern is mostly unpredictable), but **not** a universal fix for the hashtable regression. A real fix needs *accuracy*-based filtering rather than *confidence*-based filtering — exactly what the SPP+PPF [Bhatia ISCA'19] perceptron filter does. Confidence is the wrong feature; the right one is "did this signature's recent prefetches actually get used".
+
+This is the only finding in our study with a clear negative result, and it points directly at the next chapter of SPP research.
+
 ## 6. Discussion
 
 The implementation closely follows the paper. The most impactful design constraint we hit was the **4 KB OS-page boundary**: a strictly sequential stream sees the chain reset every 64 cache lines, which caps SPP's coverage on workloads like `bench_stride`. Scarab's stride/stream prefetchers do not have this restriction because they operate on coarser 64 KB regions. This is consistent with the original paper's argument that SPP's *qualitative* niche is irregular patterns rather than pure streams; on Spec CPU 2006/2017 (which our PIN frontend cannot decode out of the box) the paper reports SPP > stride on many integer benchmarks.

@@ -259,6 +259,22 @@ Nuances our "SPP does no harm" claim: uniformly random ⇒ no harm; mildly-misle
 
 ---
 
+## We built the fix — and proved it doesn't generalise
+
+Added a new `PREF_SPP_ISSUE_THRESHOLD` knob (decoupled from `PF_THRESHOLD`): chain still extends through low-conf hops, but the *prefetch issue* is gated.
+
+| Bench | tuned (off) | issue=60 | issue=80 |
+|-|-|-|-|
+| linkedlist | 0.176 | 0.166 (−5.7 %) | **0.099 (−43.7 %)** |
+| 2dstencil | 2.773 | 2.664 (−3.9 %) | 2.573 (−7.2 %) |
+| hashtable | 0.331 | 0.332 | **0.333 (full fix)** |
+
+**Negative result**: issue=80 fixes hashtable but devastates linkedlist. The chain's late hops have confidence ∈ [50, 80] on productive workloads — useful there, polluting on hashtable. A pure confidence cutoff cannot tell them apart.
+
+**The right fix needs *accuracy*-based filtering** — exactly what SPP+PPF [Bhatia ISCA'19] does.
+
+---
+
 ## What surprised us
 
 - **4 KB OS-page boundary** caps SPP on pure sequential streams (chain breaks every 64 lines). Stride/stream use coarser 64 KB regions and don't have this issue.
