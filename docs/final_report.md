@@ -165,6 +165,27 @@ Re-ran all five benchmarks at `--pref_spp_pf_threshold=40` (script: `scripts/run
 
 **The knee is a strict improvement everywhere it matters** — never worse, 1–3 % better on the three benchmarks where SPP actually issues prefetches. On `random` the confidence gate already filters out 100 % of would-be prefetches at any threshold, so the knee makes no difference. This argues that 40 % is a better default than the paper's 25 % at least on this Scarab + Kaby-Lake configuration; the original paper picked 25 % against a different (larger) L2 and MSHR, so the right cutoff is plausibly machine-dependent.
 
+### 5.6 MAX_DEPTH sweep — confidence stops the chain, not the cap
+
+We swept `--pref_spp_max_depth ∈ {1, 2, 4, 8, 16, 32, 64}` on `linkedlist` at the knee `pf=40` (script: `scripts/run_depth_sweep.sh`):
+
+| MAX_DEPTH | IPC | speedup | observed avg depth |
+|-|-|-|-|
+| 1  | 0.076 | 1.55× | 0.69 (no lookahead at all) |
+| 2  | 0.109 | 2.22× | 1.66 |
+| 4  | 0.161 | 3.30× | 4.00 (hits cap) |
+| **8**  | **0.176** | **3.59×** | 7.64 (close to cap) |
+| 16 | 0.174 | 3.57× | 8.25 (saturates) |
+| 32 | 0.174 | 3.57× | 8.25 (no change) |
+| 64 | 0.174 | 3.57× | 8.25 (no change) |
+
+Two findings:
+
+* **`MAX_DEPTH = 8` is enough** for this workload — going deeper buys nothing because the path-confidence threshold (40 %) naturally terminates the chain at avg ≈ 8 hops. Beyond MAX_DEPTH = 16 the observed depth is identical to the cap of 8, confirming the cap is never the limiting factor.
+* **`MAX_DEPTH = 16` is *slightly worse* than `MAX_DEPTH = 8`** (0.174 vs 0.176) — a small but reproducible MSHR-pressure penalty for issuing prefetches at depth 8 that get filtered by the chain anyway. The paper's `MAX_DEPTH = L2_MSHR_SIZE = 16` is a fine upper bound but, again, machine-dependent.
+
+The two knees compose cleanly: at `pf=40, depth=8` SPP delivers the same 3.59× speedup as `pf=40, depth=16` while issuing slightly fewer prefetches.
+
 ## 6. Discussion
 
 The implementation closely follows the paper. The most impactful design constraint we hit was the **4 KB OS-page boundary**: a strictly sequential stream sees the chain reset every 64 cache lines, which caps SPP's coverage on workloads like `bench_stride`. Scarab's stride/stream prefetchers do not have this restriction because they operate on coarser 64 KB regions. This is consistent with the original paper's argument that SPP's *qualitative* niche is irregular patterns rather than pure streams; on Spec CPU 2006/2017 (which our PIN frontend cannot decode out of the box) the paper reports SPP > stride on many integer benchmarks.

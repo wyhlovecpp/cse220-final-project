@@ -20,6 +20,7 @@ results/PARAMS.*.template
 results_ablation/
 results_sweep/
 results_pf40/
+results_depth/
 
 # Stray stat files in repo root from accidental runs
 /*.stat.*

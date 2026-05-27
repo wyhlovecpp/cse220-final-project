@@ -164,6 +164,24 @@ Both manifested as SIGSEGV on `linkedlist` / `strided` at lookahead depth ≥ 4.
 
 ---
 
+## MAX_DEPTH sweep — chain saturates by 8 hops
+
+| MAX_DEPTH | IPC | observed depth |
+|-|-|-|
+| 1  | 0.076 | 0.7 (no lookahead) |
+| 2  | 0.109 | 1.7 |
+| 4  | 0.161 | 4.0 (cap) |
+| **8**  | **0.176** | **7.6** (knee) |
+| 16 | 0.174 | 8.2 (saturated) |
+| 32 | 0.174 | 8.2 |
+| 64 | 0.174 | 8.2 |
+
+- At `pf=40`, the path-confidence threshold **terminates the chain at ≈ 8 hops**, not the cap.
+- `MAX_DEPTH = 16` is slightly *worse* than `8` because of MSHR pressure on prefetches the chain would have killed anyway.
+- Both knees compose: `pf=40, depth=8` is the design point for this Scarab+Kaby-Lake config.
+
+---
+
 ## What surprised us
 
 - **4 KB OS-page boundary** caps SPP on pure sequential streams (chain breaks every 64 lines). Stride/stream use coarser 64 KB regions and don't have this issue.
