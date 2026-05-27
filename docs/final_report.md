@@ -332,6 +332,29 @@ Why? Because on `linkedlist` the path-confidence chain decays geometrically with
 
 This is the only finding in our study with a clear negative result, and it points directly at the next chapter of SPP research.
 
+### 5.13 A seventh benchmark — naive matrix multiply
+
+We added `benchmarks/bench_matmul.c`, a textbook 512×512 dense GEMM (`C = A × B`, three nested loops, no blocking). The inner-loop access pattern interleaves three streams:
+
+* `A[i][k]` — row-major sequential as `k` advances; +1 cache-line delta.
+* `B[k][j]` — column-stride of N doubles = N × 8 B = **exactly 4 KB = one OS page** for our N = 512.
+* `C[i][j]` — outer-loop invariant; should be a hit.
+
+| Config (matmul IPC) | IPC | speedup vs nopref |
+|-|-|-|
+| nopref                                | 0.374 | 1.00× |
+| stride                                | 0.384 | 1.025× |
+| stream                                | 0.374 | 1.00× (no effect!) |
+| SPP default (pf=25, d=16)             | 0.365 | 0.976× (**−2.4 %**) |
+| SPP tuned (pf=40, d=8)                | 0.365 | 0.976× (−2.4 %; tuning doesn't help) |
+
+Two findings:
+
+1. **Stream's no-effect is surprising** at first, but explained by the inner k-loop's interleaved A+B streams. Scarab's stream prefetcher tracks streams per *cache line*; A's +1 line stream and B's +64 line stream collide in the tracker.
+2. **SPP regresses by 2.4 %** — the *same* root cause as `2dstencil`'s GHR being useless (§5.7). B's per-`k` stride is exactly one OS page, and SPP's signature has no way to express that pattern (the in-page delta computation is bounded to ±63 lines). SPP picks up the +1 stream from A but issues 200 K low-confidence LLC-grade prefetches based on misleading signature mixes from B's per-page hops, and those pollute. Our tuned `(pf=40, depth=8)` knee doesn't fix it either, because the bad prefetches mostly have confidence in the 40–90 % band that the knee can't filter out.
+
+**Take-away.** matmul becomes the second SPP failure case in our suite (the first being `hashtable`). Both share a common shape: a workload where the *real* stride lives at a granularity SPP's intra-page signature can't represent (an OS-page row stride here, an unstructured chain walk in hashtable). This is *not* a bug in SPP — it's a deliberate algorithmic boundary the paper acknowledges — but it explains where the technique stops working and motivates spatial-streaming variants (Bingo, SMS) as complementary techniques.
+
 ## 6. Discussion
 
 The implementation closely follows the paper. The most impactful design constraint we hit was the **4 KB OS-page boundary**: a strictly sequential stream sees the chain reset every 64 cache lines, which caps SPP's coverage on workloads like `bench_stride`. Scarab's stride/stream prefetchers do not have this restriction because they operate on coarser 64 KB regions. This is consistent with the original paper's argument that SPP's *qualitative* niche is irregular patterns rather than pure streams; on Spec CPU 2006/2017 (which our PIN frontend cannot decode out of the box) the paper reports SPP > stride on many integer benchmarks.

@@ -445,6 +445,46 @@ addr        | sig 12b|   |  Δ + cΔ|        threshold = 25 %
 <li><strong>SPP is the most consistent</strong>: never worse than 0.98× nopref, never catastrophic.</li>
 <li>No prefetcher dominates everywhere; SPP is <em>never the worst</em>.</li>
 </ul></section>
+<section><h2>A 7th benchmark — naive 512×512 matrix multiply</h2>
+<p><code>C[i][j] = Σₖ A[i][k] × B[k][j]</code> — <code>B</code>'s <code>k</code>-stride is N×8 B = <strong>exactly one OS page</strong> (4 KB).</p>
+<table>
+<thead>
+<tr>
+<th>Config</th>
+<th>IPC</th>
+<th>Δ vs nopref</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>nopref</td>
+<td>0.374</td>
+<td>—</td>
+</tr>
+<tr>
+<td>stride</td>
+<td>0.384</td>
+<td>+2.5 %</td>
+</tr>
+<tr>
+<td>stream</td>
+<td>0.374</td>
+<td>0 (trackers collide on interleaved streams)</td>
+</tr>
+<tr>
+<td><strong>SPP default</strong></td>
+<td><strong>0.365</strong></td>
+<td><strong>−2.4 %</strong></td>
+</tr>
+<tr>
+<td>SPP tuned (pf=40, d=8)</td>
+<td>0.365</td>
+<td>−2.4 % (tuning doesn't help)</td>
+</tr>
+</tbody>
+</table>
+<p>Second SPP failure — same root cause as the 2-D stencil's GHR being useless: <code>B</code>'s row stride is exactly one OS page, beyond SPP's intra-page signature range. Knee can't fix it.</p>
+<p><strong>Two failure cases (<code>hashtable</code>, <code>matmul</code>) share a shape: the real stride lives at a granularity SPP's signature can't represent.</strong> Motivates spatial-streaming variants (Bingo, SMS) as complementary techniques.</p></section>
 <section><h2>The composed knee — <code>pf=40, d=8</code> on every benchmark</h2>
 <table>
 <thead>

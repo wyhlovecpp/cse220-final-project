@@ -228,6 +228,24 @@ SPP sits in the top tier — within 4 % of the best (stride) and ahead of every 
 
 ---
 
+## A 7th benchmark — naive 512×512 matrix multiply
+
+`C[i][j] = Σₖ A[i][k] × B[k][j]` — `B`'s `k`-stride is N×8 B = **exactly one OS page** (4 KB).
+
+| Config | IPC | Δ vs nopref |
+|-|-|-|
+| nopref | 0.374 | — |
+| stride | 0.384 | +2.5 % |
+| stream | 0.374 | 0 (trackers collide on interleaved streams) |
+| **SPP default** | **0.365** | **−2.4 %** |
+| SPP tuned (pf=40, d=8) | 0.365 | −2.4 % (tuning doesn't help) |
+
+Second SPP failure — same root cause as the 2-D stencil's GHR being useless: `B`'s row stride is exactly one OS page, beyond SPP's intra-page signature range. Knee can't fix it.
+
+**Two failure cases (`hashtable`, `matmul`) share a shape: the real stride lives at a granularity SPP's signature can't represent.** Motivates spatial-streaming variants (Bingo, SMS) as complementary techniques.
+
+---
+
 ## The composed knee — `pf=40, d=8` on every benchmark
 
 | Benchmark | Paper default<br>(pf=25, d=16) | **Both knees**<br>(pf=40, d=8) | improvement |
