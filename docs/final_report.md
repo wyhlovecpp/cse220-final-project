@@ -370,6 +370,22 @@ The hypothesis is confirmed with a clean single-variable test: **N=512 is the on
 
 This is the strongest piece of evidence we have for the "page-aligned stride is the algorithmic boundary" claim, because it isolates the *single* variable that toggles the failure mode. Any matmul (or stencil) where the row pitch is *not* a clean multiple of the page size will benefit from SPP; any where it is will see the regression we documented in §5.13. A workload-aware compiler / runtime could potentially pad inner-loop dimensions to avoid this corner case — a small, mechanical fix at the software level.
 
+### 5.15 The software fix in action — padded matmul (engineering capstone)
+
+We then *built* the proposed fix. `benchmarks/bench_matmul_padded.c` is the same N = 512 matrix multiply, but the row pitch is padded from 512 to 520 doubles, so B's per-`k` stride becomes 520 × 8 B = **4160 B** — no longer a clean multiple of the 4 KB page:
+
+| matmul N = 512 configuration | nopref | SPP default | SPP gain |
+|-|-|-|-|
+| original (LD = 512, **stride = 1 page**) | 0.374 | 0.365 | **−2.3 %** (regression) |
+| **padded (LD = 520, stride = 4160 B)** | **0.996** | **1.301** | **+30.6 %** |
+
+Two effects compose:
+
+1. **The padding by itself lifts the baseline 2.66× (0.374 → 0.996)** — at LD = 512 the columns of B all map to the same few sets in the 8-way set-associative L2, and every k-step thrashes. Padding to 520 removes that conflict. This is a textbook *cache-conflict* pathology (the "leading dimension" trick from BLAS).
+2. **On top of that, SPP delivers an additional +30.6 %** (0.996 → 1.301) — exactly the regime where SPP should shine, now that the row stride isn't page-aligned.
+
+The net effect on the original failure case: a **33-point IPC-percentage swing**, from −2.3 % regression to +30.6 % speedup. SPP went from "subtly harmful" to "the single biggest IPC contributor on this workload." This is the cleanest engineering takeaway from the entire study: **on workloads that look like a kernel SPP "ought to work on but doesn't" (matmul, 2-D stencil), the right intervention is not to retune SPP itself but to pad the data layout** so the access pattern's natural stride falls off the page-aligned cliff. The fix is a one-character source change, costs eight doubles per row of padding, and trivially generalises to any compiler / library that knows its target's page size.
+
 ## 6. Discussion
 
 The implementation closely follows the paper. The most impactful design constraint we hit was the **4 KB OS-page boundary**: a strictly sequential stream sees the chain reset every 64 cache lines, which caps SPP's coverage on workloads like `bench_stride`. Scarab's stride/stream prefetchers do not have this restriction because they operate on coarser 64 KB regions. This is consistent with the original paper's argument that SPP's *qualitative* niche is irregular patterns rather than pure streams; on Spec CPU 2006/2017 (which our PIN frontend cannot decode out of the box) the paper reports SPP > stride on many integer benchmarks.

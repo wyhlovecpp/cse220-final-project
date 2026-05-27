@@ -261,6 +261,23 @@ A software-level fix: **pad inner-loop dimensions** so the row pitch isn't a cle
 
 ---
 
+## The software fix in action — padded matmul
+
+`bench_matmul_padded.c`: same N = 512, but row pitch padded to LD = 520 (stride = 4160 B, no longer page-aligned).
+
+| Config | nopref | SPP | SPP gain |
+|-|-|-|-|
+| Original (stride = 1 page) | 0.374 | 0.365 | **−2.3 %** (regression) |
+| **Padded (stride = 4160 B)** | **0.996** | **1.301** | **+30.6 %** |
+
+- **Padding alone** lifts baseline 2.66× — removes set-associative cache conflict (the classic BLAS LD trick).
+- **SPP on top** delivers another +30.6 %.
+- **Net swing: −2.3 % → +30.6 %**, a 33-point IPC-percentage flip.
+
+The right intervention isn't to retune SPP, it's to **pad the data layout**. One-line source change, eight bytes per row, generalises to any compiler aware of its target page size.
+
+---
+
 ## The composed knee — `pf=40, d=8` on every benchmark
 
 | Benchmark | Paper default<br>(pf=25, d=16) | **Both knees**<br>(pf=40, d=8) | improvement |

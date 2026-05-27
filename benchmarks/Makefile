@@ -10,7 +10,7 @@ CFLAGS  = -O2 -static -march=nehalem \
           -mno-avx -mno-avx2 -mno-bmi -mno-bmi2 -mno-fma -mno-sse4.2 \
           -fno-asynchronous-unwind-tables -fno-stack-protector
 
-BENCHES = bench_stride bench_strided bench_2dstencil bench_linkedlist bench_random bench_hashtable bench_matmul
+BENCHES = bench_stride bench_strided bench_2dstencil bench_linkedlist bench_random bench_hashtable bench_matmul bench_matmul_padded
 
 all: $(BENCHES)
 

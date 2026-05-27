@@ -534,6 +534,38 @@ addr        | sig 12b|   |  Δ + cΔ|        threshold = 25 %
 </table>
 <p>Single variable controlled experiment: <strong>only N=512 has page-aligned stride, only N=512 sees the regression</strong>. All three non-aligned N values yield small positive SPP speedups.</p>
 <p>A software-level fix: <strong>pad inner-loop dimensions</strong> so the row pitch isn't a clean multiple of the page size. Mechanical, no hardware change needed.</p></section>
+<section><h2>The software fix in action — padded matmul</h2>
+<p><code>bench_matmul_padded.c</code>: same N = 512, but row pitch padded to LD = 520 (stride = 4160 B, no longer page-aligned).</p>
+<table>
+<thead>
+<tr>
+<th>Config</th>
+<th>nopref</th>
+<th>SPP</th>
+<th>SPP gain</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Original (stride = 1 page)</td>
+<td>0.374</td>
+<td>0.365</td>
+<td><strong>−2.3 %</strong> (regression)</td>
+</tr>
+<tr>
+<td><strong>Padded (stride = 4160 B)</strong></td>
+<td><strong>0.996</strong></td>
+<td><strong>1.301</strong></td>
+<td><strong>+30.6 %</strong></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>Padding alone</strong> lifts baseline 2.66× — removes set-associative cache conflict (the classic BLAS LD trick).</li>
+<li><strong>SPP on top</strong> delivers another +30.6 %.</li>
+<li><strong>Net swing: −2.3 % → +30.6 %</strong>, a 33-point IPC-percentage flip.</li>
+</ul>
+<p>The right intervention isn't to retune SPP, it's to <strong>pad the data layout</strong>. One-line source change, eight bytes per row, generalises to any compiler aware of its target page size.</p></section>
 <section><h2>The composed knee — <code>pf=40, d=8</code> on every benchmark</h2>
 <table>
 <thead>
