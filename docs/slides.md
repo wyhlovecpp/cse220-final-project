@@ -188,9 +188,11 @@ Earlier we guessed: *"GHR's 8 entries can't track all the pages a sweeping workl
 
 We tested it — GHR_ENTRIES ∈ {8, 16, 32, 64, 128} all give **identical** IPC = 2.751 on stencil.
 
-**Real reason**: SPP encodes deltas in 7-bit sign-magnitude → max |delta| = **63 cache lines**. The stencil's cross-row delta is ±W = ±64 (one OS page) — overflows and aliases onto the sign bit. PT never confidently learns the +W edge, so GHR has nothing useful to carry.
+**First hypothesis** — encoding limit (max |delta|=63 vs ±W=±64): tested by widening to 8/10 bits → **IPC identical to 4 decimals**. Hypothesis falsified.
 
-A trivial fix: widen `SIG_DELTA_BIT` from 7 to 8. (We left it at 7 to match the paper.)
+**Actual reason** — in-page delta is always in [-63, +63], so encoding is never binding. The lookahead chain extends *along* the row (delta=+1) one line at a time; it only generates a *cross-row* hop at the row's last line — never as a chain step. So PT never learns "+W after sig X", and GHR has no useful entry to carry. Fix would require a different algorithm (e.g. spatial streaming), not a wider encoding.
+
+**Side-finding**: on linkedlist, bit=8 is mildly *worse* than 7 (0.169 vs 0.174). The encoding's sign-bit position perturbs PT-bucket distribution non-trivially.
 
 ---
 

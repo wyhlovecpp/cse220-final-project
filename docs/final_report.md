@@ -198,13 +198,21 @@ We claimed in §5.3 that GHR contributed only ~0 % on the 2-D stencil "because i
 | 64  | 2.751 |
 | 128 | 2.751 |
 
-**Result is flat to 4 decimal places** — GHR size is *not* the bottleneck. After re-checking the algorithm, the real reason GHR doesn't help on stencil is the **7-bit sign-magnitude delta encoding** (`SIG_DELTA_BIT = 7`):
+**Result is flat to 4 decimal places** — GHR size is *not* the bottleneck.
 
-* The stencil's cross-row delta is ±W = ±64 cache lines (W = 512 elements × 8 B = 4096 B = exactly one OS page).
-* The encoding represents |delta| in the lower 6 bits with the 7th bit as sign, so the maximum representable |delta| is 63. **|±64| overflows** and aliases onto sign bit only — i.e. it looks like delta = 0 or delta = -0.
-* The PT therefore never learns a confident "+W" entry for the stencil's row-stride pattern; GHR can't retain a signature that depends on a learned +W.
+We initially hypothesised the cause was SPP's **7-bit sign-magnitude delta encoding** (max representable |delta| = 63 cache lines), since the stencil's cross-row delta is ±W = ±64 cache lines. We tested this directly by widening the encoding (`--pref_spp_sig_delta_bit ∈ {7, 8, 10}`):
 
-This is a *real* paper-relevant finding: SPP's signature encoding has an in-built ±63-cache-line range limit. Workloads with row strides at exactly the OS-page granularity (1 page = 64 lines × 64 B) sit precisely on this boundary and lose their cross-row prefetches. A trivial fix is to widen `SIG_DELTA_BIT` from 7 to 8 (we left the default at 7 to match the paper).
+| `SIG_DELTA_BIT` | 2dstencil IPC | GHR boots |
+|-|-|-|
+| 7 (paper default) | 2.71961 | 2046 |
+| 8 (hypothesis "fix") | 2.71961 | 2046 |
+| 10 | 2.71961 | 2046 |
+
+**Hypothesis falsified** — widening the encoding produces *identical* IPC and identical GHR boot count to 4 decimal places. Re-examining the code clarified why: within a single page, the page offset is ∈ [0, 63] and so the maximum *in-page* delta is also ±63 (never ±64). SPP never *computes* a cross-page delta during ST/PT training — page-crossings are detected and shunted to the GHR *as an event*, carrying the in-page delta value (∈ ±63) verbatim. The encoding width is therefore never the binding constraint.
+
+The actual reason GHR contributes so little on the stencil is **the lookahead chain's geometry**: PT learns the dominant +1/-1 within-row deltas, the chain extends *along the row* one cache line at a time, and only the row's last hop becomes a page-crossing event. The chain never naturally generates a +W cross-row hop that GHR could carry to the destination page's first access. Fixing that would require a fundamentally different algorithm (e.g. spatial memory streaming or Bingo), not a wider delta encoding.
+
+A side-finding: on linked-list, `SIG_DELTA_BIT = 8` is *very slightly worse* than 7 (IPC 0.169 vs 0.174, GHR boots identical at 24 580). Even when all deltas are in range, the encoding's sign-bit *position* changes which PT buckets the same negative delta lands in, perturbing the predictor in non-trivial ways. SPP is more sensitive to encoding details than the paper makes apparent.
 
 ### 5.8 Two more Scarab built-in prefetchers as additional baselines
 

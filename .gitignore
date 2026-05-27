@@ -22,6 +22,7 @@ results_sweep/
 results_pf40/
 results_depth/
 results_extras/
+results_sigdelta/
 
 # Stray stat files in repo root from accidental runs
 /*.stat.*
