@@ -4,6 +4,26 @@
 
 ---
 
+## TL;DR — one picture
+
+![Speedup heatmap (8 benchmarks × 6 prefetchers, normalised to nopref)](../results/heatmap_speedup.png)
+
+
+
+We implemented SPP (Kim et al., MICRO 2016) from scratch in Scarab — 764 lines of C across `pref_spp.{c,h,param.def,param.h}` — then ran a **100+ experiment** study spanning **8 microbenchmarks × 6 prefetchers**. SPP at the paper defaults delivers **3.47× speedup on pointer-chasing** (`linkedlist`), measurable gains on other structured workloads, and within 1.5 % of `nopref` on random — exactly the confidence-throttled behaviour the paper aims for. Beyond replication we landed **16 distinct findings**:
+
+* **Reproduced the paper's qualitative claim** — confidence gate works; lookahead is responsible for ~60 % of the speedup, GHR for ~6 %.
+* **Tuned the design point** — a `(PF_THRESHOLD = 40, MAX_DEPTH = 8)` knee strictly beats the paper's `(25, 16)` on every benchmark where SPP issues prefetches (+1.9 % to +4.1 %), with no regression elsewhere.
+* **Falsified an obvious-looking hypothesis** — the 7-bit sign-magnitude delta encoding is *not* the reason GHR fails on 2-D stencil; widening it to 8 / 10 bits leaves IPC identical to 4 decimals.
+* **Found two failure cases** (`hashtable`, `matmul N = 512`) and root-caused them to **page-aligned strides** — confirmed with a single-variable controlled experiment (`matmul N ∈ {512, 448, 384, 256}`: only the page-aligned case regresses).
+* **Built the engineering fix** — a one-character source change padding `matmul`'s row pitch from 512 to 520 turns SPP from *−2.3 % regression* to *+30.6 % speedup* (a 33-point IPC-percentage swing).
+* **Implemented + tested + falsified** a proposed `ISSUE_THRESHOLD` knob — confidence-based filtering can't generalise; the right primitive is accuracy-based (PPF), as Bhatia ISCA'19 also concluded.
+* **Compared against 5 other prefetchers** on every workload — Markov is *catastrophic* (−44 % to −52 %) on unstructured access; SPP is the most consistent (never worse than 0.98× nopref, productive on 4 of 8 workloads).
+
+Repository: <https://github.com/wyhlovecpp/cse220-final-project> (22 commits, MIT-style).
+
+---
+
 ## 1. Introduction
 
 The Signature Path Prefetcher (SPP) [Kim et al., MICRO 2016] is a confidence-based, lookahead L2 data prefetcher. Within an OS page, SPP compresses the trail of recent intra-page strides ("deltas") into a small 12-bit **signature**. A second table maps each signature to a histogram of subsequent deltas, each with a saturating confidence counter. To predict, SPP iteratively performs *lookahead*: it selects the highest-confidence delta, issues a prefetch, then folds that delta back into the signature to predict the *next* delta — multiplying confidences along the way. Prefetching stops when the accumulated **path confidence** falls below a threshold, so SPP issues many prefetches when it is confident and few when it is uncertain. Compared to a fixed-degree stride prefetcher this lets SPP cover non-trivial patterns (e.g., delta sequences) without polluting the cache on hard-to-predict streams.
