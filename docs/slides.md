@@ -225,6 +225,24 @@ SPP sits in the top tier — within 4 % of the best (stride) and ahead of every 
 
 ---
 
+## A new failure case — hash-table probing
+
+| Config | hashtable IPC | Δ vs nopref |
+|-|-|-|
+| nopref | 0.333 | 0 |
+| stride | 0.333 | 0 (correctly off) |
+| stream | 0.333 | 0 (correctly off) |
+| **SPP default** | **0.328** | **−1.3 %** |
+| SPP tuned (pf=40, d=8) | 0.331 | −0.5 % |
+
+- Of 1.4 M demands, SPP's confidence gate issued only **31 high-conf prefetches** — the gate works.
+- But the framework still routes 324 K **low-conf (LLC-grade)** prefetches, which pollute slightly.
+- Tuning to (pf=40, d=8) cuts the harm in half. A proper LLC-grade threshold would close the gap fully — paper doesn't specify it.
+
+Nuances our "SPP does no harm" claim: uniformly random ⇒ no harm; mildly-misleading patterns ⇒ a few % leakage.
+
+---
+
 ## What surprised us
 
 - **4 KB OS-page boundary** caps SPP on pure sequential streams (chain breaks every 64 lines). Stride/stream use coarser 64 KB regions and don't have this issue.

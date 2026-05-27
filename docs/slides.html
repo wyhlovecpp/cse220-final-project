@@ -414,6 +414,49 @@ addr        | sig 12b|   |  Δ + cΔ|        threshold = 25 %
 </tbody>
 </table>
 <p><strong>The two knees compose</strong> — <code>pf=40, d=8</code> is the best SPP we found on every benchmark, beating the paper's default by 1.9 – 4.1 % with no regression anywhere.</p></section>
+<section><h2>A new failure case — hash-table probing</h2>
+<table>
+<thead>
+<tr>
+<th>Config</th>
+<th>hashtable IPC</th>
+<th>Δ vs nopref</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>nopref</td>
+<td>0.333</td>
+<td>0</td>
+</tr>
+<tr>
+<td>stride</td>
+<td>0.333</td>
+<td>0 (correctly off)</td>
+</tr>
+<tr>
+<td>stream</td>
+<td>0.333</td>
+<td>0 (correctly off)</td>
+</tr>
+<tr>
+<td><strong>SPP default</strong></td>
+<td><strong>0.328</strong></td>
+<td><strong>−1.3 %</strong></td>
+</tr>
+<tr>
+<td>SPP tuned (pf=40, d=8)</td>
+<td>0.331</td>
+<td>−0.5 %</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Of 1.4 M demands, SPP's confidence gate issued only <strong>31 high-conf prefetches</strong> — the gate works.</li>
+<li>But the framework still routes 324 K <strong>low-conf (LLC-grade)</strong> prefetches, which pollute slightly.</li>
+<li>Tuning to (pf=40, d=8) cuts the harm in half. A proper LLC-grade threshold would close the gap fully — paper doesn't specify it.</li>
+</ul>
+<p>Nuances our "SPP does no harm" claim: uniformly random ⇒ no harm; mildly-misleading patterns ⇒ a few % leakage.</p></section>
 <section><h2>What surprised us</h2>
 <ul>
 <li><strong>4 KB OS-page boundary</strong> caps SPP on pure sequential streams (chain breaks every 64 lines). Stride/stream use coarser 64 KB regions and don't have this issue.</li>

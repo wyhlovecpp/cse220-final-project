@@ -13,6 +13,7 @@ benchmarks/bench_strided
 benchmarks/bench_2dstencil
 benchmarks/bench_linkedlist
 benchmarks/bench_random
+benchmarks/bench_hashtable
 
 # Experiment results (kept locally but not committed to keep repo small)
 results/*/

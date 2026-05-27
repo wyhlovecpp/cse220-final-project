@@ -243,6 +243,29 @@ SPP sits in the top tier alongside stride and stream — within 4 % of stride, a
 
 **The two knees compose without conflict** — `pf=40, depth=8` is the best SPP configuration we found on every benchmark where SPP issues prefetches, beating the paper's default by 1.9 %–4.1 % with no regression elsewhere. This is the *final* SPP design point we recommend for this Scarab + Kaby-Lake configuration; users can flip on both via `--pref_spp_pf_threshold=40 --pref_spp_max_depth=8`.
 
+### 5.10 A new failure case — hash-table probing
+
+We added a sixth micro-benchmark, `benchmarks/bench_hashtable.c`, that builds a 128 K-bucket closed-addressing hash table over a 256 K-entry pool and probes it 512 K times with xorshift-generated keys. Each probe is `table[key & MASK]` (random scatter) followed by a short within-bucket chain walk (locality-preserving):
+
+| Config (hashtable IPC) | IPC | speedup vs nopref |
+|-|-|-|
+| nopref                                | 0.333 | 1.000× |
+| stride                                | 0.333 | 1.000× (no effect — correct) |
+| stream                                | 0.333 | 1.000× (no effect — correct) |
+| **SPP default** (pf=25, d=16)         | **0.328** | **0.985× (−1.3 %)** |
+| SPP tuned (pf=40, d=8)                | 0.331 | 0.994× (−0.5 %) |
+
+`hashtable` is the first benchmark where **SPP slightly hurts performance**. Looking at the SPP-internal counters:
+
+* `PREF_SPP_OPERATE = 1 392 521` L2 demands processed.
+* `PREF_SPP_PF_ISSUED_L2 = 31` (!) — the path-confidence gate correctly classified almost all candidates as low-confidence.
+* But `PREF_UL1REQ_QUEUE_SENTREQ = 324 489` because the *framework* still routes sub-threshold (`< FILL_THRESHOLD = 90 %`) prefetches as LLC-grade requests, not L2.
+* Useful rate `L1_PREF_HIT / sent = 11 %` — far below SPP's 96–100 % on the other workloads.
+
+So even though SPP's confidence gate is working as designed, the within-bucket chain layout in `pool[]` *does* exhibit a learnable +offset pattern (Entry size = 32 B, two entries per cache line), which SPP picks up just enough to issue lots of low-confidence prefetches that don't hit. Tuning to `pf=40, depth=8` cuts the harm roughly in half. A more principled fix would be a separate per-prefetcher LLC-issue threshold, which the paper does not specify — Scarab's framework decides that.
+
+This nuances our earlier "SPP does no harm" claim: SPP does *no measurable harm* on uniformly random access (`random` benchmark), but on workloads that *look* mildly predictable but aren't (like hash-table chain walking), it can leak a few percent of IPC.
+
 ## 6. Discussion
 
 The implementation closely follows the paper. The most impactful design constraint we hit was the **4 KB OS-page boundary**: a strictly sequential stream sees the chain reset every 64 cache lines, which caps SPP's coverage on workloads like `bench_stride`. Scarab's stride/stream prefetchers do not have this restriction because they operate on coarser 64 KB regions. This is consistent with the original paper's argument that SPP's *qualitative* niche is irregular patterns rather than pure streams; on Spec CPU 2006/2017 (which our PIN frontend cannot decode out of the box) the paper reports SPP > stride on many integer benchmarks.
