@@ -23,6 +23,10 @@ results/                    per-(bench,cfg) Scarab stat dumps + summary csv + pl
 tools/                      Intel PIN 3.15 (downloaded, not in git)
 ```
 
+The presentation is also available as a self-contained HTML slide deck at
+`docs/slides.html` (open in any modern browser; reveal.js is loaded from a
+CDN). Run `python3 scripts/render_slides.py` to regenerate after edits.
+
 ## Building
 
 Requires Ubuntu (tested on 24.04), GCC 13.3, CMake ≥ 3.5, Python 3.8+ with `matplotlib`.

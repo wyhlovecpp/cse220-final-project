@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CSE220 Final Project — SPP in Scarab</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/dist/reset.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/dist/reveal.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/dist/theme/white.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/plugin/highlight/monokai.css">
+<style>
+.reveal { font-size: 26px; }
+.reveal h1 { font-size: 1.6em; }
+.reveal h2 { font-size: 1.3em; }
+.reveal table { font-size: 0.7em; margin: auto; }
+.reveal pre code { font-size: 0.7em; padding: 0.6em; max-height: 80vh; }
+.reveal ul, .reveal ol { display: block; text-align: left; }
+.reveal section { text-align: left; }
+.reveal section h1, .reveal section h2 { text-align: center; }
+.reveal .slide-number { font-size: 16px; }
+.reveal blockquote { font-size: 0.85em; padding: 0.6em 1em; }
+</style>
+</head>
+<body>
+<div class="reveal"><div class="slides">
+<section><h1>Implementing the Signature Path Prefetcher (SPP) in Scarab</h1>
+<p><strong>CSE 220 Final Project — Paper 3</strong></p>
+<p>Kim, Pugsley, Gratz, Reddy, Wilkerson, Chishti
+<em>"Path Confidence Based Lookahead Prefetching,"</em> MICRO 2016</p></section>
+<section><h2>Why a smarter prefetcher?</h2>
+<ul>
+<li>Stride / stream prefetchers nail the <strong>easy 80 %</strong> — pure sequential or fixed-stride streams.</li>
+<li>They give up on multi-delta, page-internal, or irregular patterns.</li>
+<li><strong>SPP's pitch</strong>: aggressive <em>when confident</em>, restrained otherwise, so no cache pollution on hard workloads.</li>
+</ul>
+<p>A 2-D stencil's per-cell deltas (−W, −1, +1, +W) defeat fixed stride/stream prefetchers, but the <em>sequence</em> is exactly the signature SPP compresses.</p></section>
+<section><h2>SPP in one picture</h2>
+<pre><code class="language-text">            +---------+   +--------+
+demand --&gt; | ST     | -&gt; | PT      | -&gt; path-confidence × α
+addr        | sig 12b|   |  Δ + cΔ|        threshold = 25 %
+            +---------+   +--------+               |
+                  ^             |                  v
+                  |             |              issue prefetch
+                  |             |                  |
+                  |  page-cross |                  v
+                  +-------------+              [Filter (1024)] -&gt; queue
+                  GHR (8 entries)              tracks usefulness
+</code></pre>
+<p><code>sig' = (sig ≪ 3) ⊕ Δ</code>  (3-bit shift × 12-bit sig × 7-bit Δ_sm)</p>
+<p><code>path_conf = α · (c_Δ / c_sig) · prev_conf</code></p></section>
+<section><h2>Implementation in Scarab</h2>
+<ul>
+<li><strong>3 new files</strong> under <code>src/prefetcher/</code>:</li>
+<li><code>pref_spp.h</code> (data structures)</li>
+<li><code>pref_spp.c</code> (~600 LoC algorithm + lookahead loop)</li>
+<li><code>pref_spp.param.def</code> (15 knobs)</li>
+<li><strong>1 row</strong> added to <code>pref_table.def</code>; <strong>1</strong> include in <code>pref_common.c</code>.</li>
+<li><strong>20</strong> SPP-specific <code>STAT_EVENT</code>s (operate, ST hit, GHR boot, …).</li>
+<li>Total state: <strong>≈ 6 KB</strong> (matches paper).</li>
+</ul>
+<pre><code class="language-c">{ &quot;spp&quot;, PREF_TO_UL1, NULL, pref_spp_init, pref_spp_done, NULL,
+  NULL, NULL, NULL, NULL, NULL, NULL,
+  pref_spp_ul1_miss, pref_spp_ul1_hit, pref_spp_ul1_pref_hit },
+</code></pre></section>
+<section><h2>Algorithm walkthrough (per L2 demand)</h2>
+<ol>
+<li><code>ST.read_and_update_sig(page, offset)</code> → <code>(last_sig, curr_sig, Δ)</code></li>
+<li><code>Filter.check(addr, DEMAND)</code> → bump α counter if prefetched</li>
+<li><code>if last_sig: PT.update_pattern(last_sig, Δ)</code></li>
+<li><strong>Lookahead loop</strong>, up to <code>MAX_DEPTH = 16</code> hops:
+   <code>c
+   for each Δ_w in PT[curr_sig]:
+       path_conf = depth==0 ? local_conf : α·(c_Δ/c_sig)·prev_conf
+       if path_conf &gt;= 25%: enqueue prefetch
+   advance: curr_sig = (curr_sig ≪ 3) ⊕ Δ_chosen_sm</code></li>
+<li>Cross-page Δ ⇒ write GHR entry; next-page demand re-seeds ST from GHR.</li>
+</ol></section>
+<section><h2>Two bugs we hit while bringing this up</h2>
+<ul>
+<li><strong>Per-iteration scratch queue.</strong> ChampSim grows one <code>pf_q</code> over the whole <code>do { ... }</code> loop; with multi-Δ patterns + <code>MAX_DEPTH = 16</code> that overflows. We allocate <code>PT_WAY + 1</code> slots and reset every outer iteration.</li>
+<li><strong>Stat-event OOB.</strong> Originally indexed <code>STAT_EVENT(0, DEPTH_MAX + i)</code> for <code>i = 0..9</code> — but <code>DEPTH_MAX</code> is the <strong>last</strong> stat in the entire <code>stat_files.def</code> chain, so those writes ran past <code>global_stat_array</code>. Replaced with ten explicit <code>DEPTH_0..DEPTH_8/GE9</code> stats.</li>
+</ul>
+<p>Both manifested as SIGSEGV on <code>linkedlist</code> / <code>strided</code> at lookahead depth ≥ 4.</p></section>
+<section><h2>Evaluation methodology</h2>
+<ul>
+<li><strong>Scarab</strong> cycle-accurate, <code>PARAMS.kaby_lake</code> (32 KB L1d, <strong>1 MB 8-way L2</strong>, DDR4-2400).</li>
+<li><strong>4 configs</strong>: <code>nopref</code>, <code>stride</code>, <code>stream</code>, <code>spp</code>.</li>
+<li><strong>5 micro-benchmarks</strong>: sequential, large-stride, 2-D stencil, pointer-chase, random.</li>
+<li><strong>10 M-instruction</strong> runs after PIN fast-forward.</li>
+<li>Metrics: IPC, L2 MPKI, prefetcher accuracy / coverage, SPP lookahead depth.</li>
+</ul></section>
+<section><h2>Headline results: speedup over no-prefetcher</h2>
+<table>
+<thead>
+<tr>
+<th>Benchmark</th>
+<th>stride</th>
+<th>stream</th>
+<th><strong>SPP</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>stride</code> (sequential)</td>
+<td>1.07×</td>
+<td><strong>1.20×</strong></td>
+<td>0.95×</td>
+</tr>
+<tr>
+<td><code>strided</code> (+7 lines)</td>
+<td>1.01×</td>
+<td>1.00×</td>
+<td>1.00×</td>
+</tr>
+<tr>
+<td><code>2dstencil</code></td>
+<td>1.18×</td>
+<td><strong>1.37×</strong></td>
+<td><strong>1.07×</strong></td>
+</tr>
+<tr>
+<td><code>linkedlist</code></td>
+<td><strong>3.77×</strong></td>
+<td>3.71×</td>
+<td><strong>3.47×</strong></td>
+</tr>
+<tr>
+<td><code>random</code></td>
+<td>1.00×</td>
+<td>1.00×</td>
+<td>1.00×</td>
+</tr>
+</tbody>
+</table>
+<p><strong>SPP shines on <code>linkedlist</code></strong> (3.47× — pointer-chasing with intra-page structure)
+<strong>SPP does no harm on <code>random</code></strong> (0 prefetches issued — confidence gate works)</p></section>
+<section><h2>Ablation: what each piece contributes</h2>
+<table>
+<thead>
+<tr>
+<th>Configuration</th>
+<th><code>linkedlist</code></th>
+<th><code>2dstencil</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>nopref</td>
+<td>1.00×</td>
+<td>1.00×</td>
+</tr>
+<tr>
+<td><strong>spp</strong> (full)</td>
+<td><strong>3.47×</strong></td>
+<td><strong>1.07×</strong></td>
+</tr>
+<tr>
+<td>spp − lookahead (depth = 1)</td>
+<td>1.56×</td>
+<td>1.01×</td>
+</tr>
+<tr>
+<td>spp − GHR (no page boot)</td>
+<td>3.26×</td>
+<td>1.07×</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>Lookahead is the workhorse</strong> — disabling it collapses the linked-list speedup from 3.47× to 1.56× (≈ 60 % of SPP's gain).</li>
+<li><strong>GHR contributes ~6 %</strong> on linked-list, ~0 % on the stencil — its 8 entries can't track all the pages a sweeping workload touches.</li>
+</ul></section>
+<section><h2>Parameter sweep: PF_THRESHOLD knee</h2>
+<table>
+<thead>
+<tr>
+<th><code>PF_THRESHOLD</code></th>
+<th>IPC</th>
+<th>speedup</th>
+<th>accuracy</th>
+<th>avg depth</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>10 %</td>
+<td>0.165</td>
+<td>3.39×</td>
+<td>100 %</td>
+<td>15.9 (cap)</td>
+</tr>
+<tr>
+<td><strong>25 %</strong> (default)</td>
+<td>0.169</td>
+<td>3.47×</td>
+<td>100 %</td>
+<td>12.3</td>
+</tr>
+<tr>
+<td><strong>40 %</strong> (knee)</td>
+<td><strong>0.174</strong></td>
+<td><strong>3.57×</strong></td>
+<td>100 %</td>
+<td>8.3</td>
+</tr>
+<tr>
+<td>60 %</td>
+<td>0.166</td>
+<td>3.41×</td>
+<td>100 %</td>
+<td>4.5</td>
+</tr>
+<tr>
+<td>80 %</td>
+<td>0.099</td>
+<td>2.03×</td>
+<td>97 %</td>
+<td>1.5</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>The <strong>paper's default 25 % is safe but not the knee</strong>: 40 % is mildly better on a workload where every link is 100 %-confident.</li>
+<li>Too aggressive (10 %) saturates the L2 queue; too conservative (80 %) collapses depth to ~1 and halves coverage.</li>
+</ul></section>
+<section><h2>Does the knee generalise? — pf=40 on every benchmark</h2>
+<table>
+<thead>
+<tr>
+<th>Benchmark</th>
+<th>pf=25 (default)</th>
+<th><strong>pf=40 (knee)</strong></th>
+<th>Δ</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>stride</td>
+<td>1.730</td>
+<td><strong>1.757</strong></td>
+<td>+1.6 %</td>
+</tr>
+<tr>
+<td>strided</td>
+<td>0.331</td>
+<td>0.331</td>
+<td>0 %</td>
+</tr>
+<tr>
+<td>2dstencil</td>
+<td>2.720</td>
+<td><strong>2.751</strong></td>
+<td>+1.1 %</td>
+</tr>
+<tr>
+<td>linkedlist</td>
+<td>0.169</td>
+<td><strong>0.174</strong></td>
+<td>+3.0 %</td>
+</tr>
+<tr>
+<td>random</td>
+<td>0.625</td>
+<td>0.625</td>
+<td>0 %</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>pf=40 is never worse</strong>, 1–3 % better on every workload where SPP issues prefetches.</li>
+<li>The paper's 25 % was tuned against a different L2 / MSHR — 40 % looks like a strict win for this Scarab Kaby-Lake config.</li>
+</ul></section>
+<section><h2>MAX_DEPTH sweep — chain saturates by 8 hops</h2>
+<table>
+<thead>
+<tr>
+<th>MAX_DEPTH</th>
+<th>IPC</th>
+<th>observed depth</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>0.076</td>
+<td>0.7 (no lookahead)</td>
+</tr>
+<tr>
+<td>2</td>
+<td>0.109</td>
+<td>1.7</td>
+</tr>
+<tr>
+<td>4</td>
+<td>0.161</td>
+<td>4.0 (cap)</td>
+</tr>
+<tr>
+<td><strong>8</strong></td>
+<td><strong>0.176</strong></td>
+<td><strong>7.6</strong> (knee)</td>
+</tr>
+<tr>
+<td>16</td>
+<td>0.174</td>
+<td>8.2 (saturated)</td>
+</tr>
+<tr>
+<td>32</td>
+<td>0.174</td>
+<td>8.2</td>
+</tr>
+<tr>
+<td>64</td>
+<td>0.174</td>
+<td>8.2</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>At <code>pf=40</code>, the path-confidence threshold <strong>terminates the chain at ≈ 8 hops</strong>, not the cap.</li>
+<li><code>MAX_DEPTH = 16</code> is slightly <em>worse</em> than <code>8</code> because of MSHR pressure on prefetches the chain would have killed anyway.</li>
+<li>Both knees compose: <code>pf=40, depth=8</code> is the design point for this Scarab+Kaby-Lake config.</li>
+</ul></section>
+<section><h2>Why doesn't GHR help on 2-D stencil?</h2>
+<p>Earlier we guessed: <em>"GHR's 8 entries can't track all the pages a sweeping workload touches."</em></p>
+<p>We tested it — GHR_ENTRIES ∈ {8, 16, 32, 64, 128} all give <strong>identical</strong> IPC = 2.751 on stencil.</p>
+<p><strong>First hypothesis</strong> — encoding limit (max |delta|=63 vs ±W=±64): tested by widening to 8/10 bits → <strong>IPC identical to 4 decimals</strong>. Hypothesis falsified.</p>
+<p><strong>Actual reason</strong> — in-page delta is always in [-63, +63], so encoding is never binding. The lookahead chain extends <em>along</em> the row (delta=+1) one line at a time; it only generates a <em>cross-row</em> hop at the row's last line — never as a chain step. So PT never learns "+W after sig X", and GHR has no useful entry to carry. Fix would require a different algorithm (e.g. spatial streaming), not a wider encoding.</p>
+<p><strong>Side-finding</strong>: on linkedlist, bit=8 is mildly <em>worse</em> than 7 (0.169 vs 0.174). The encoding's sign-bit position perturbs PT-bucket distribution non-trivially.</p></section>
+<section><h2>All prefetchers head-to-head on linkedlist</h2>
+<table>
+<thead>
+<tr>
+<th>Prefetcher</th>
+<th>IPC</th>
+<th>speedup</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>nopref</td>
+<td>0.049</td>
+<td>1.00×</td>
+</tr>
+<tr>
+<td>markov</td>
+<td>0.073</td>
+<td>1.51×</td>
+</tr>
+<tr>
+<td>ghb</td>
+<td>0.139</td>
+<td>2.86×</td>
+</tr>
+<tr>
+<td>stream</td>
+<td>0.180</td>
+<td>3.71×</td>
+</tr>
+<tr>
+<td><strong>SPP @ pf=40, d=8</strong></td>
+<td><strong>0.176</strong></td>
+<td><strong>3.59×</strong></td>
+</tr>
+<tr>
+<td>stride</td>
+<td>0.183</td>
+<td>3.77×</td>
+</tr>
+</tbody>
+</table>
+<p>SPP sits in the top tier — within 4 % of the best (stride) and ahead of every other history-based prefetcher.</p></section>
+<section><h2>What surprised us</h2>
+<ul>
+<li><strong>4 KB OS-page boundary</strong> caps SPP on pure sequential streams (chain breaks every 64 lines). Stride/stream use coarser 64 KB regions and don't have this issue.</li>
+<li>On <code>stride</code>, SPP issues 303 K prefetches with <strong>97 % accuracy</strong>, but <strong>90 % are <em>late</em></strong> — SPP arrives just-in-time while stream pre-stages farther ahead.</li>
+<li>On <code>linkedlist</code>, <strong>average lookahead depth is 12 hops</strong>; on <code>random</code> it is <strong>0</strong> — exactly the throttling the paper aimed for.</li>
+<li>Scarab on Ubuntu 24 / GCC 13 needed five small portability patches (<code>&lt;cstdint&gt;</code>, <code>-fcommon</code>, deprecated PIN APIs, …).</li>
+</ul></section>
+<section><h2>Conclusion + Future Work</h2>
+<ul>
+<li><strong>Implemented the full paper algorithm</strong> (ST + PT + Filter + GHR + path-confidence lookahead).</li>
+<li><strong>Reproduced the qualitative behaviour</strong>: aggressive when confident, quiet otherwise, decisive win on linked-list, no harm on random.</li>
+<li><strong>Future</strong>:</li>
+<li>SPEC CPU traces once we extend Scarab's BMI2/AVX2 decoder.</li>
+<li>SPP+PPF perceptron filter [Bhatia ISCA'19] for usefulness prediction.</li>
+<li>Multi-core PT sharing.</li>
+</ul>
+<p><strong>Repo</strong>: https://github.com/wyhlovecpp/cse220-final-project — see <code>README.md</code> for build + run.</p></section>
+<section><h2>Q &amp; A</h2>
+<p>Thanks!</p></section>
+</div></div>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/plugin/notes/notes.js"></script>
+<script>
+Reveal.initialize({
+  hash: true,
+  slideNumber: true,
+  controls: true,
+  plugins: [ RevealHighlight, RevealNotes ],
+});
+</script>
+</body>
+</html>
