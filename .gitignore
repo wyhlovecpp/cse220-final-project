@@ -29,6 +29,7 @@ results_tuned/
 results_ht_pf/
 results_issue/
 results_alt/
+results_matmul_n/
 
 # Stray stat files in repo root from accidental runs
 /*.stat.*

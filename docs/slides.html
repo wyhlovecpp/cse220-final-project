@@ -485,6 +485,55 @@ addr        | sig 12b|   |  Δ + cΔ|        threshold = 25 %
 </table>
 <p>Second SPP failure — same root cause as the 2-D stencil's GHR being useless: <code>B</code>'s row stride is exactly one OS page, beyond SPP's intra-page signature range. Knee can't fix it.</p>
 <p><strong>Two failure cases (<code>hashtable</code>, <code>matmul</code>) share a shape: the real stride lives at a granularity SPP's signature can't represent.</strong> Motivates spatial-streaming variants (Bingo, SMS) as complementary techniques.</p></section>
+<section><h2>Single-variable confirmation — vary N, page-alignment is the killer</h2>
+<table>
+<thead>
+<tr>
+<th>N</th>
+<th>B's stride</th>
+<th>page-aligned?</th>
+<th>nopref</th>
+<th>SPP</th>
+<th>Δ</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>512</strong></td>
+<td><strong>4096 B = 1 page</strong></td>
+<td><strong>yes</strong></td>
+<td>0.374</td>
+<td><strong>0.365</strong></td>
+<td><strong>−2.3 %</strong></td>
+</tr>
+<tr>
+<td>448</td>
+<td>3584 B</td>
+<td>no</td>
+<td>1.032</td>
+<td>1.041</td>
+<td>+0.9 %</td>
+</tr>
+<tr>
+<td>384</td>
+<td>3072 B</td>
+<td>no</td>
+<td>1.114</td>
+<td>1.129</td>
+<td>+1.4 %</td>
+</tr>
+<tr>
+<td>256</td>
+<td>2048 B</td>
+<td>no</td>
+<td>2.284</td>
+<td>2.310</td>
+<td>+1.1 %</td>
+</tr>
+</tbody>
+</table>
+<p>Single variable controlled experiment: <strong>only N=512 has page-aligned stride, only N=512 sees the regression</strong>. All three non-aligned N values yield small positive SPP speedups.</p>
+<p>A software-level fix: <strong>pad inner-loop dimensions</strong> so the row pitch isn't a clean multiple of the page size. Mechanical, no hardware change needed.</p></section>
 <section><h2>The composed knee — <code>pf=40, d=8</code> on every benchmark</h2>
 <table>
 <thead>

@@ -246,6 +246,21 @@ Second SPP failure — same root cause as the 2-D stencil's GHR being useless: `
 
 ---
 
+## Single-variable confirmation — vary N, page-alignment is the killer
+
+| N | B's stride | page-aligned? | nopref | SPP | Δ |
+|-|-|-|-|-|-|
+| **512** | **4096 B = 1 page** | **yes** | 0.374 | **0.365** | **−2.3 %** |
+| 448 | 3584 B | no | 1.032 | 1.041 | +0.9 % |
+| 384 | 3072 B | no | 1.114 | 1.129 | +1.4 % |
+| 256 | 2048 B | no | 2.284 | 2.310 | +1.1 % |
+
+Single variable controlled experiment: **only N=512 has page-aligned stride, only N=512 sees the regression**. All three non-aligned N values yield small positive SPP speedups.
+
+A software-level fix: **pad inner-loop dimensions** so the row pitch isn't a clean multiple of the page size. Mechanical, no hardware change needed.
+
+---
+
 ## The composed knee — `pf=40, d=8` on every benchmark
 
 | Benchmark | Paper default<br>(pf=25, d=16) | **Both knees**<br>(pf=40, d=8) | improvement |

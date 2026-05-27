@@ -355,6 +355,21 @@ Two findings:
 
 **Take-away.** matmul becomes the second SPP failure case in our suite (the first being `hashtable`). Both share a common shape: a workload where the *real* stride lives at a granularity SPP's intra-page signature can't represent (an OS-page row stride here, an unstructured chain walk in hashtable). This is *not* a bug in SPP — it's a deliberate algorithmic boundary the paper acknowledges — but it explains where the technique stops working and motivates spatial-streaming variants (Bingo, SMS) as complementary techniques.
 
+### 5.14 Single-variable confirmation — varying N in matmul
+
+To pin down the page-alignment hypothesis, we vary just the matrix dimension `N`, holding everything else constant. The B-matrix per-`k` stride is `N×8 B`; only at `N=512` is that an exact multiple of the 4 KB OS page:
+
+| `N` | B's k-stride | page-aligned? | nopref | SPP default | Δ vs nopref |
+|-|-|-|-|-|-|
+| **512** | **4096 B = 1 page** | **yes** | 0.374 | **0.365** | **−2.3 %** |
+| 448 | 3584 B = 56 lines | no | 1.032 | 1.041 | +0.9 % |
+| 384 | 3072 B = 48 lines | no | 1.114 | 1.129 | +1.4 % |
+| 256 | 2048 B = 32 lines | no | 2.284 | 2.310 | +1.1 % |
+
+The hypothesis is confirmed with a clean single-variable test: **N=512 is the only point where SPP regresses, and it is the only point where the row stride aligns exactly with an OS page**. At N ∈ {448, 384, 256}, SPP delivers small but consistent positive speedups (+0.9 % to +1.4 %). The much higher absolute IPC at smaller N reflects working-set fit in L2 — not anything about SPP — and our SPP results scale proportionally on each baseline.
+
+This is the strongest piece of evidence we have for the "page-aligned stride is the algorithmic boundary" claim, because it isolates the *single* variable that toggles the failure mode. Any matmul (or stencil) where the row pitch is *not* a clean multiple of the page size will benefit from SPP; any where it is will see the regression we documented in §5.13. A workload-aware compiler / runtime could potentially pad inner-loop dimensions to avoid this corner case — a small, mechanical fix at the software level.
+
 ## 6. Discussion
 
 The implementation closely follows the paper. The most impactful design constraint we hit was the **4 KB OS-page boundary**: a strictly sequential stream sees the chain reset every 64 cache lines, which caps SPP's coverage on workloads like `bench_stride`. Scarab's stride/stream prefetchers do not have this restriction because they operate on coarser 64 KB regions. This is consistent with the original paper's argument that SPP's *qualitative* niche is irregular patterns rather than pure streams; on Spec CPU 2006/2017 (which our PIN frontend cannot decode out of the box) the paper reports SPP > stride on many integer benchmarks.
