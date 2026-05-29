@@ -5,8 +5,11 @@ Implementation of **Kim et al., "Path Confidence Based Lookahead Prefetching," M
 ## Repository layout
 
 ```
-docs/                       project plan, final report (md), presentation outline
-benchmarks/                 5 micro-benchmarks (sequential, strided, stencil, ll, random)
+docs/                       project_plan.md, final_report.md (~2-page submission),
+                            final_report_full.md (full 16-finding study),
+                            slides.md / slides.html (10-min presentation deck)
+benchmarks/                 8 micro-benchmarks (stride, strided, stencil, ll, random,
+                            hashtable, matmul, matmul_padded)
 scripts/                    run + analysis driver (python3)
 scarab/                     submodule-style copy of the upstream Scarab simulator
   src/prefetcher/pref_spp.{h,c,param.def,param.h}    NEW -- SPP implementation
@@ -87,7 +90,7 @@ Across 5 micro-benchmarks (10 M instructions each after fast-forward):
 | `linkedlist` | 0.049 | **3.77×** | 3.71× | **3.47×** |
 | `random`     | 0.625 | 1.00× | 1.00×     | 1.00× |
 
-SPP achieves **3.47× speedup on pointer-chasing** and **does no harm on random access**, exactly the conservative-but-aggressive behaviour the paper aims for. See `docs/final_report.md` for full analysis.
+SPP achieves **3.47× speedup on pointer-chasing** and **does no harm on random access**, exactly the conservative-but-aggressive behaviour the paper aims for. See `docs/final_report.md` for the 2-page submission and `docs/final_report_full.md` for the full 16-finding study (parameter sweeps, two failure cases, the page-alignment root-cause, and the +30.6 % padding fix).
 
 ## Citations
 

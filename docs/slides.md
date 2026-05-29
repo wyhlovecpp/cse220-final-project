@@ -16,7 +16,9 @@ footer: "Paper 3: Kim et al., MICRO 2016"
 # Implementing the Signature Path Prefetcher (SPP) in Scarab
 **CSE 220 Final Project — Paper 3**
 
-Kim, Pugsley, Gratz, Reddy, Wilkerson, Chishti
+*Group members: <YOUR NAMES HERE>*
+
+Based on: Kim, Pugsley, Gratz, Reddy, Wilkerson, Chishti
 *"Path Confidence Based Lookahead Prefetching,"* MICRO 2016
 
 ---
